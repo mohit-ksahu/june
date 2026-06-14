@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer creates the `.june/` directory structure and computes SHA-1 content hashes.
+1. **The Storage and Utility Library (`june`)**: This layer creates the `.june/` directory structure, computes SHA-1 hashes, and serializes repository objects into typed binary payloads.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -53,7 +53,28 @@ By default, June looks for or creates this directory in the current directory. I
 │   └── objects/
 ```
 
-## 3. Dependencies & Build Requirements
+## 3. Object Hashing and Serialization Formats
+
+### The Object Header Format
+
+Before writing an object to disk or computing its SHA-1 hash, June adds a standard header at the beginning:
+`[Object Type] [Payload Length in Bytes]\0[Payload Body Bytes]`
+
+- The header specifies the object type and size.
+- Using a NUL byte at the end of the header lets June read the type and size before allocating memory for the rest of the file.
+- In `ObjectData.java`, the header prefix is written to a byte array, followed by the body data.
+
+```java
+public byte[] serialize() {
+  byte[] header = (type + " " + data.length + "\0").getBytes(StandardCharsets.UTF_8);
+  byte[] result = new byte[header.length + data.length];
+  System.arraycopy(header, 0, result, 0, header.length);
+  System.arraycopy(data, 0, result, header.length, data.length);
+  return result;
+}
+```
+
+## 4. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
 
@@ -64,16 +85,16 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.security`: Provides the SHA-1 hashing classes.
 * `java.util`: Provides lists, maps, and property utilities.
 
-## 4. System Implementation Sequence and Class Dependency Reference
+## 5. System Implementation Sequence and Class Dependency Reference
 
 This section outlines how each class is built and how they work together.
 
-### 1. Hashing Library (`Sha1.java`)
+### 1. Hashing Library & Serialization Models (`Sha1.java` and `ObjectData.java`)
 
-* **Role**: Establishes cryptographic SHA-1 hashing.
-* **Integrations**: Computes hash values from inputs used for physical file mapping and validation checks.
+* **Role**: Establishes byte-level data serialization and SHA-1 hashing. `ObjectData.java` serves as the base model for serializing objects.
+* **Integrations**: Receives raw byte payloads, formats standard metadata headers, and performs hex conversions used across all storage systems.
 
-### 2. Repository Metadata Model (`Repository.java`)
+### 2. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
 * **Role**: Resolves local repository paths.
 
