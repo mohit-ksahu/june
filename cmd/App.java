@@ -1,5 +1,8 @@
 import java.io.File;
+import java.util.List;
+import java.util.ArrayList;
 import june.Repository;
+import june.Sha1;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -15,6 +18,22 @@ public class App {
       System.out.println("Initialized empty June repository in .june/");
       return;
     }
+    if (cmd.equals("hash")) {
+      if (args.length < 2) {
+        System.out.println("Usage: java App hash <string>");
+        System.exit(1);
+      }
+      System.out.println(Sha1.hash(args[1].getBytes()));
+      return;
+    }
     System.out.println("Unknown command: " + cmd);
+  }
+
+  private static void deleteDir(File f) {
+    File[] list = f.listFiles();
+    if (list != null) {
+      for (File child : list) deleteDir(child);
+    }
+    f.delete();
   }
 }
