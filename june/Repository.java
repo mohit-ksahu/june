@@ -1,6 +1,9 @@
 package june;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+
 public class Repository {
   public static final String REPO_DIR = ".june";
   public static final String REFS = "refs";
