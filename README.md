@@ -1,4 +1,4 @@
-# June - feat: implement SHA-1 content hashing utility
+# June
 
 June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
 
