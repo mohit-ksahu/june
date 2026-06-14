@@ -3,6 +3,8 @@ import java.util.List;
 import java.util.ArrayList;
 import june.Repository;
 import june.Sha1;
+import june.ObjectData;
+import june.ObjectTypes;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -24,6 +26,15 @@ public class App {
         System.exit(1);
       }
       System.out.println(Sha1.hash(args[1].getBytes()));
+      return;
+    }
+    if (cmd.equals("serialize")) {
+      if (args.length < 3) {
+        System.out.println("Usage: java App serialize <type> <content>");
+        System.exit(1);
+      }
+      ObjectData data = ObjectData.create(args[1], args[2].getBytes());
+      System.out.println("Serialized object type: " + data.getType() + ", length: " + data.serialize().length + " bytes");
       return;
     }
     System.out.println("Unknown command: " + cmd);
