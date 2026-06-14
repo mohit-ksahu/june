@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer creates the `.june/` directory structure.
+1. **The Storage and Utility Library (`june`)**: This layer creates the `.june/` directory structure and computes SHA-1 content hashes.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -61,7 +61,21 @@ June does not use any external packages. It is written in pure Java and only use
 
 * `java.io`: Handles file and directory reading and writing.
 * `java.nio`: Handles path resolution, symbolic links, and file movements.
+* `java.security`: Provides the SHA-1 hashing classes.
 * `java.util`: Provides lists, maps, and property utilities.
+
+## 4. System Implementation Sequence and Class Dependency Reference
+
+This section outlines how each class is built and how they work together.
+
+### 1. Hashing Library (`Sha1.java`)
+
+* **Role**: Establishes cryptographic SHA-1 hashing.
+* **Integrations**: Computes hash values from inputs used for physical file mapping and validation checks.
+
+### 2. Repository Metadata Model (`Repository.java`)
+
+* **Role**: Resolves local repository paths.
 
 # June
 
