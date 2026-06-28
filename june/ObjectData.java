@@ -27,7 +27,12 @@ public class ObjectData {
     return result;
   }
 
-    public static ObjectData create(String type, byte[] data) {
-    return new ObjectData(type, data);
+  public static ObjectData create(String type, byte[] data) {
+    return switch (type) {
+      case ObjectTypes.BLOB -> new ObjectData(ObjectTypes.BLOB, data);
+      case ObjectTypes.TREE -> new Tree(data);
+      case ObjectTypes.COMMIT -> new Commit(data);
+      default -> throw new IllegalArgumentException("Unknown object type: " + type);
+    };
   }
 }

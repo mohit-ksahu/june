@@ -5,6 +5,9 @@ import june.Repository;
 import june.Sha1;
 import june.ObjectData;
 import june.ObjectTypes;
+import june.Tree;
+import june.Modes;
+import june.Commit;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -35,6 +38,25 @@ public class App {
       }
       ObjectData data = ObjectData.create(args[1], args[2].getBytes());
       System.out.println("Serialized object type: " + data.getType() + ", length: " + data.serialize().length + " bytes");
+      return;
+    }
+    if (cmd.equals("serialize-tree")) {
+      if (args.length < 4) {
+        System.out.println("Usage: java App serialize-tree <mode> <name> <sha1>");
+        System.exit(1);
+      }
+      Tree.Entry entry = new Tree.Entry(args[1], args[2], args[3]);
+      Tree tree = new Tree(new ArrayList<>(List.of(entry)));
+      System.out.println("Serialized tree length: " + tree.serialize().length + " bytes");
+      return;
+    }
+    if (cmd.equals("serialize-commit")) {
+      if (args.length < 4) {
+        System.out.println("Usage: java App serialize-commit <treeSha1> <author> <message>");
+        System.exit(1);
+      }
+      Commit commit = new Commit(args[1], List.of(), args[2], args[2], args[3]);
+      System.out.println("Serialized commit:\n" + new String(commit.serialize()));
       return;
     }
     System.out.println("Unknown command: " + cmd);

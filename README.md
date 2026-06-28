@@ -1,4 +1,4 @@
-# June
+# June - fix: resolve tree sorting order with virtual trailing slashes
 
 June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
 
