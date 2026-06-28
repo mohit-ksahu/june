@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer creates the `.june/` directory structure, computes SHA-1 hashes, and serializes blobs, trees, and commits.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, computes SHA-1 hashes, serializes objects, and compresses payloads using Zlib deflation.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -203,6 +203,7 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.nio`: Handles path resolution, symbolic links, and file movements.
 * `java.security`: Provides the SHA-1 hashing classes.
 * `java.util`: Provides lists, maps, and property utilities.
+* `java.util.zip`: Handles file compression.
 * `java.time`: Handles date and time for commits.
 
 ## 5. System Implementation Sequence and Class Dependency Reference
