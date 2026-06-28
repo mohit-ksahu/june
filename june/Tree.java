@@ -11,7 +11,9 @@ public class Tree extends ObjectData {
 
     @Override
     public int compareTo(Entry o) {
-      return this.name.compareTo(o.name);
+      String a = name + (mode.equals(Modes.TREE) ? "/" : "");
+      String b = o.name + (o.mode.equals(Modes.TREE) ? "/" : "");
+      return a.compareTo(b);
     }
   }
 

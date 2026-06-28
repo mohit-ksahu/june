@@ -146,14 +146,17 @@ private static byte[] serialize(List<Entry> entries) {
 
 #### Directory Sorting Logic
 
-- Tree entries are sorted alphabetically by their name.
-- This is implemented via the `compareTo` method in the `Entry` record.
+- When sorting files and directories, directories are grouped with files that share the same prefix.
+- Adding a virtual slash (`/`) to directory names during sorting keeps the sorting consistent.
+- This is done in the `compareTo` method of the `Entry` record, which compares directory names with a `/` suffix.
 
 ```java
 public record Entry(String mode, String name, String sha1) implements Comparable<Entry> {
   @Override
   public int compareTo(Entry o) {
-    return this.name.compareTo(o.name);
+    String a = name + (mode.equals(Modes.TREE) ? "/" : "");
+    String b = o.name + (o.mode.equals(Modes.TREE) ? "/" : "");
+    return a.compareTo(b);
   }
 }
 ```
