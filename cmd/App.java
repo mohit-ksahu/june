@@ -59,6 +59,15 @@ public class App {
       System.out.println("Serialized commit:\n" + new String(commit.serialize()));
       return;
     }
+    if (cmd.equals("compress")) {
+      if (args.length < 2) {
+        System.out.println("Usage: java App compress <string>");
+        System.exit(1);
+      }
+      byte[] compressed = june.Helper.compress(args[1].getBytes());
+      System.out.println("Compressed length: " + compressed.length + " bytes");
+      return;
+    }
     System.out.println("Unknown command: " + cmd);
   }
 
