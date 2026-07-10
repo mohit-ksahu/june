@@ -26,45 +26,46 @@ June supports a standard subset of operations:
 
 The code is organized into two distinct directories:
 1. **`june/`**: Contains the reusable base library under package `june` and package `june.lib`. This manages underlying operations (Repository, ObjectStore, Index, Diff) and the main logical workflows.
-2. **`cmd/`**: Contains the CLI under the default package. It handles user inputs parsing (via `App.java` main method) and CLI terminal feedback formatters.
+2. **`cmd/`**: Contains the CLI wrapper under the default package. It handles user inputs parsing (via `App.java` main method) and CLI terminal feedback formatters.
 
 ## Build and Setup
 
 ### 1. Requirements
 
-- Java Development Kit (JDK).
+- Java Development Kit (JDK) 17 or higher.
 
 ### 2. Compilation
 
 Clean and compile the library:
 
 ```bash
-javac -d bin/june june/*.java june/lib/*.java
+rm -rf out && mkdir -p out/june out/cmd
+javac -d out/june june/*.java june/lib/*.java
 ```
 
-Compile the CLI (pointing classpath to the library):
+Compile the CLI wrapper (pointing classpath to the library):
 
 ```bash
-javac -cp bin/june -d bin/cmd cmd/*.java
+javac -cp out/june -d out/cmd cmd/*.java
 ```
 
 Or compile and package the application into JARs:
 - Reusable Library JAR:
   ```bash
-  jar --create --file june.jar -C bin/june .
+  jar --create --file june.jar -C out/june .
   ```
-- Executable CLI JAR:
+- Executable CLI Wrapper JAR:
   ```bash
-  jar --create --file cmd.jar --main-class App -C bin/june . -C bin/cmd .
+  jar --create --file cmd.jar --main-class App -C out/june . -C out/cmd .
   ```
 
 ### 3. Execution Entrypoint
 
-Run commands using either the compiled classpath or the packaged JAR:
+Run command wrappers using either the compiled classpath or the packaged JAR:
 
 ```bash
 # Using classpath
-java -cp bin/june:bin/cmd App <command> [arguments]
+java -cp out/june:out/cmd App <command> [arguments]
 
 # Using JAR
 java -jar cmd.jar <command> [arguments]
@@ -87,7 +88,7 @@ To package a standalone execution environment that runs without requiring a pre-
 2. Run the application using the bundled JRE:
    ```bash
    # Using classpath
-   ./jre/bin/java -cp bin/june:bin/cmd App <command> [arguments]
+   ./jre/bin/java -cp out/june:out/cmd App <command> [arguments]
 
    # Using JAR
    ./jre/bin/java -jar cmd.jar <command> [arguments]
@@ -100,9 +101,24 @@ To package a standalone execution environment that runs without requiring a pre-
 Create a fresh repository directory structure in the current directory:
 
 ```bash
-java -cp bin App init
+java -cp out App init
 ```
+This initializes the `.june/` directory structure containing `.june/objects/`, `.june/refs/heads/`, `.june/refs/tags/`, and sets the active HEAD reference to `refs/heads/main`.
 
+#### Customizing the Metadata Directory (`.june`) Location
+
+By default, June looks for or creates the `.june/` directory in the current working directory. You can configure a custom parent location for the `.june` metadata directory using either:
+
+1. **Environment Variable (`JUNE_DIR`)**:
+   ```bash
+   export JUNE_DIR=/path/to/custom/parent/folder
+   java -cp out App init
+   ```
+
+2. **JVM System Property (`june.dir`)**:
+   ```bash
+   java -Djune.dir=/path/to/custom/parent/folder -cp out App init
+   ```
 
 ### 2. `config` — Manage Configuration Settings
 
@@ -110,13 +126,13 @@ Read or write repository configuration parameters stored in `.june/config`:
 
 ```bash
 # Set user name
-java -cp bin App config user.name "John Doe"
+java -cp out App config user.name "John Doe"
 
 # Set user email
-java -cp bin App config user.email "john@example.com"
+java -cp out App config user.email "john@example.com"
 
 # Read a configuration value
-java -cp bin App config user.name
+java -cp out App config user.name
 ```
 
 ### 3. `add` — Stage File Changes
@@ -125,13 +141,13 @@ Stage files and directories to prepare them for the next commit:
 
 ```bash
 # Stage a single file
-java -cp bin App add src/Main.java
+java -cp out App add src/Main.java
 
 # Stage multiple files
-java -cp bin App add README.md build.gradle
+java -cp out App add README.md build.gradle
 
 # Stage directory paths recursively
-java -cp bin App add docs/
+java -cp out App add docs/
 ```
 
 ### 4. `status` — Show Workspace Changes
@@ -139,7 +155,7 @@ java -cp bin App add docs/
 View the difference between the working directory, staging index, and HEAD commit:
 
 ```bash
-java -cp bin App status
+java -cp out App status
 ```
 This outputs the active branch name and lists staged changes, unstaged changes, and untracked files.
 
@@ -149,12 +165,12 @@ Save staged index modifications to the repository log history:
 
 ```bash
 # Commit standard changes with a message
-java -cp bin App commit -m "Create initial project structure"
+java -cp out App commit -m "Create initial project structure"
 
 # Automatically stage modified tracked files and commit
-java -cp bin App commit -a -m "Update configuration details"
+java -cp out App commit -a -m "Update configuration details"
 # Or combine the flags:
-java -cp bin App commit -am "Update configuration details"
+java -cp out App commit -am "Update configuration details"
 ```
 
 ### 6. `diff` — View Line Differences
@@ -163,12 +179,12 @@ Compare lines between workspace files, the staging index, and HEAD:
 
 ```bash
 # View unstaged changes in the working directory
-java -cp bin App diff
+java -cp out App diff
 
 # View staged changes in the index compared to HEAD
-java -cp bin App diff --staged
+java -cp out App diff --staged
 # Or use the alias:
-java -cp bin App diff --cached
+java -cp out App diff --cached
 ```
 
 ### 7. `branch` — Manage Branches
@@ -177,16 +193,16 @@ Manage branch references to track independent lines of development:
 
 ```bash
 # List all local branches (active branch is marked with an asterisk)
-java -cp bin App branch
+java -cp out App branch
 
 # Create a new branch pointing to the current commit
-java -cp bin App branch feature-auth
+java -cp out App branch feature-auth
 
 # Delete a branch (checks for unmerged history)
-java -cp bin App branch -d feature-auth
+java -cp out App branch -d feature-auth
 
 # Force delete a branch
-java -cp bin App branch -D feature-auth
+java -cp out App branch -D feature-auth
 ```
 
 ### 8. `tag` — Manage Tags
@@ -195,16 +211,16 @@ Create, list, or delete reference tags:
 
 ```bash
 # List all tags in the repository
-java -cp bin App tag
+java -cp out App tag
 
 # Create a tag pointing to the current commit
-java -cp bin App tag v1.0.0
+java -cp out App tag v1.0.0
 
 # Create a tag pointing to a specific commit hash or resolved ref
-java -cp bin App tag v1.0.0 a94a8f
+java -cp out App tag v1.0.0 a94a8f
 
 # Delete a tag
-java -cp bin App tag -d v1.0.0
+java -cp out App tag -d v1.0.0
 ```
 
 ### 9. `checkout` — Switch Active States
@@ -213,11 +229,11 @@ Switch the active branch or align workspace files with a tag/commit hash:
 
 ```bash
 # Switch to an existing branch
-java -cp bin App checkout feature-auth
+java -cp out App checkout feature-auth
 
 # Switch to a specific tag or commit hash (detached HEAD state)
-java -cp bin App checkout v1.0.0
-java -cp bin App checkout a94a8f
+java -cp out App checkout v1.0.0
+java -cp out App checkout a94a8f
 ```
 
 ### 10. `restore` — Discard Workspace and Index Changes
@@ -226,10 +242,10 @@ Discard local edits or unstage files in the index:
 
 ```bash
 # Discard working directory modifications and restore from the staging index
-java -cp bin App restore src/Main.java
+java -cp out App restore src/Main.java
 
 # Unstage files in the index (reverts index state back to HEAD commit)
-java -cp bin App restore --staged src/Main.java
+java -cp out App restore --staged src/Main.java
 ```
 
 ### 11. `rm` — Remove Files from Tracking
@@ -238,10 +254,10 @@ Stop tracking files and optionally remove them from the physical workspace:
 
 ```bash
 # Remove tracking and delete the file from the disk
-java -cp bin App rm src/Legacy.java
+java -cp out App rm src/Legacy.java
 
 # Remove tracking but keep the physical file in the working directory
-java -cp bin App rm --cached src/Legacy.java
+java -cp out App rm --cached src/Legacy.java
 ```
 
 ### 12. `mv` — Move or Rename Files
@@ -249,7 +265,7 @@ java -cp bin App rm --cached src/Legacy.java
 Rename a file or directory path, updating both the workspace and staging index:
 
 ```bash
-java -cp bin App mv src/OldName.java src/NewName.java
+java -cp out App mv src/OldName.java src/NewName.java
 ```
 
 ### 13. `cat-file` — Inspect Repository Objects
@@ -258,7 +274,7 @@ Decompress and print raw database object details (blobs, trees, commits):
 
 ```bash
 # Pretty-print the resolved contents of an object hash
-java -cp bin App cat-file -p a94a8f
+java -cp out App cat-file -p a94a8f
 ```
 
 ### 14. `log` — View Commit History
@@ -267,18 +283,18 @@ Display the commit logs in reverse chronological order:
 
 ```bash
 # Print standard commit log history
-java -cp bin App log
+java -cp out App log
 
 # Print condensed single-line log history
-java -cp bin App log --oneline
+java -cp out App log --oneline
 
 # Limit the log to a specific count of commits
-java -cp bin App log -n 5
+java -cp out App log -n 5
 # Or use the alias:
-java -cp bin App log --max-count 5
+java -cp out App log --max-count 5
 
 # Combine formatting and count limit
-java -cp bin App log --oneline -n 5
+java -cp out App log --oneline -n 5
 ```
 
 ### 15. `merge` — Merge Branch History
@@ -287,7 +303,7 @@ Integrate another branch, tag, or commit history into the currently checked-out 
 
 ```bash
 # Fast-forward the active branch pointer to feature-auth's commit
-java -cp bin App merge feature-auth
+java -cp out App merge feature-auth
 ```
 
 ### 16. `reset` — Hard Reset Reference State
@@ -295,5 +311,5 @@ java -cp bin App merge feature-auth
 Hard reset the working directory, staging index, and active branch references to a commit hash:
 
 ```bash
-java -cp bin App reset --hard a94a8f
+java -cp out App reset --hard a94a8f
 ```

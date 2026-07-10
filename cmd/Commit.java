@@ -7,23 +7,25 @@ public final class Commit {
     String msg = null;
     boolean auto = false;
     for (int i = 0; i < args.length; i++) {
-      if (args[i].equals("-a")) {
-        auto = true;
-      } else if (args[i].equals("-m") || args[i].equals("-am")) {
-        if (args[i].equals("-am")) {
-          auto = true;
+      switch (args[i]) {
+        case "-a" -> auto = true;
+        case "-m", "-am" -> {
+          if (args[i].equals("-am")) {
+            auto = true;
+          }
+          if (i + 1 < args.length) {
+            msg = args[++i];
+          }
         }
-        if (i + 1 < args.length) {
-          msg = args[++i];
-        }
+        default -> {}
       }
     }
     if (msg == null) {
-      throw new OperationException("fatal: no commit message specified (use -m)");
+      throw new OperationException("fatal: no commit message specified (use -m \"message\")");
     }
-    String res = repo.commit(msg, auto).message();
-    if (res != null && !res.isEmpty()) {
-      System.out.println(res);
+    String result = repo.commit(msg, auto).message();
+    if (!result.isEmpty()) {
+      System.out.println(result);
     }
   }
 }

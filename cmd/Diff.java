@@ -4,9 +4,14 @@ import june.Repository;
 public final class Diff {
   public static void run(Repository repo, String[] args) throws IOException {
     boolean staged = false;
-    if (args.length > 0 && (args[0].equals("--staged") || args[0].equals("--cached"))) {
-      staged = true;
+    for (String arg : args) {
+      if (arg.equals("--cached") || arg.equals("--staged")) {
+        staged = true;
+      }
     }
-    System.out.print(repo.diff(staged));
+    String result = repo.diff(staged);
+    if (!result.isEmpty()) {
+      System.out.print(result);
+    }
   }
 }
