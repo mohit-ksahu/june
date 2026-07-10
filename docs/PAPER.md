@@ -1,26 +1,32 @@
-# June
+# June Architecture & Specification Manual
 
-June is a simple version control system written in Java.
+This document provides a comprehensive guide to June's system architecture, design decisions, and command-line specifications.
+
+---
+
+# Architecture
+
+June is structured into independent storage, library, and command wrapper layers to separate physical database serialization, version control workflows, and user interactions.
 
 ## 1. System Design and Key Layers
 
-June is written in Java and does not use any external packages. The code is split into three layers to keep the storage logic, the feature logic, and the user interface separate.
+June is written in Java (JDK 17+) and has no external dependencies. The codebase is separated into three layers to keep storage logic, feature logic, and the user interface independent.
 
 ### Why split the code this way?
 
-Separating the command-line interface from the core storage logic keeps the codebase modular. This ensures the core logic is reusable and unaffected by changes to user commands.
+If the command-line interface code is mixed with the storage code, you can't reuse the storage system in other apps (like a GUI or a web service). Decoupling them allows you to run the VCS logic programmatically, write automated unit tests without mocking terminal streams, and change the command names without breaking the storage backend. The command wrapper is just a thin layer on top of the library.
 
 ### The three layers:
 
 1. **The Storage and Utility Library (`june`)**: This layer handles repository paths, reads and writes compressed objects, updates the staging index, compiles ignore rules, calculates diffs, and locks files to prevent write conflicts.
 2. **The Feature Library (`june.lib`)**: This layer implements the actual features (like staging, committing, checking out, and merging). It coordinates the storage layer and the workspace but does not deal with command parsing or flags.
-3. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
+3. **The CLI Wrapper (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
 
-- June routes all command-line inputs through `App.java` in the `cmd/` directory.
-- By keeping command routing separate, other programs can call the library directly without needing to validate user commands.
-- The main entry point splits the arguments so that each command handler only gets the arguments it needs. It then sets up the repository directory path, checks if the repository exists (except for the init command), and runs the correct command handler.
+- June routes terminal inputs through a single entry point in `App.java` (located in the `cmd/` directory).
+- Decoupling argument routing from the internals ensures that programmatic invocations do not have to perform user command validations. The entrypoint slices the main argument array so that individual handlers only receive parameters relevant to them.
+- It instantiates the repository context path, checks for repository existence (except for the init command), and dispatches execution to the corresponding handler.
 
 ```java
 public static void main(String[] args) {
@@ -74,9 +80,9 @@ public static void main(String[] args) {
 
 ## 2. On-Disk Database and File Layout
 
-June stores all its data and settings in a `.june` directory at the root of the workspace.
+June stores all its metadata and compressed data in a `.june` directory at the root of the workspace.
 
-By default, June looks for or creates this directory in the current directory. If it is not found, it checks parent directories until it finds a `.june` folder. You can configure a custom location using the `JUNE_DIR` environment variable or the `june.dir` Java property.
+While the name `.june` is fixed, the parent directory location where it resides can be configured using either the `JUNE_DIR` environment variable or the JVM system property `june.dir`. If neither is configured, June defaults to resolving or creating the `.june/` directory in the current working directory, or walking up parent directories until an existing `.june/` folder is located.
 
 ```
 [workspace_root]/
@@ -95,11 +101,11 @@ By default, June looks for or creates this directory in the current directory. I
 
 ### Branches, Tags, and the HEAD Pointer
 
-References are text files that hold a commit hash. They are saved as plain text containing a 40-character SHA-1 string.
-- The `HEAD` pointer tells June which branch or commit is currently checked out.
-- Pointing to a branch uses a path (like `ref: refs/heads/main`), while checking out a specific commit or tag writes the commit hash directly.
-- Pointing `HEAD` to a branch file means June does not have to change the `HEAD` file directly every time a commit is made; instead, it just updates the branch file.
-- If `HEAD` starts with `ref: `, June follows the path to read the underlying branch file; otherwise, it returns the commit hash directly.
+References are human-readable files that point to a commit hash. They are saved as plain text containing a 40-character hex SHA-1 string and a newline (`\n`).
+- The active branch pointer (`HEAD`) tells June which branch or commit is currently checked out.
+- Pointing to a branch uses a symbolic path format (like `ref: refs/heads/main\n`), while checkout of a direct commit or tag writes the commit hash directly to create a detached head state.
+- Using symbolic references avoids having to modify the HEAD file directly during every commit transaction. By letting HEAD point to a branch file, June only needs to update the branch ref file when a new commit advances history.
+- In `Repository.java`, June reads the reference target. If it starts with `ref: `, June follows the path to read the underlying branch file; otherwise, it returns the HEAD string as the direct commit hash.
 
 ```java
 public String getHeadTarget() throws IOException {
@@ -128,10 +134,10 @@ public void updateHeadRefOrCommit(String sha) throws IOException {
 
 ### Staging Index Layout
 
-- The index file (`.june/index`) lists files that are staged for the next commit.
-- June uses a plain text format for the index instead of a binary cache. This makes it easy to read and debug. It uses the NUL (`\0`) character to separate parts because NUL cannot be used in filenames, and normalizes all slashes to `/`.
-- In `Index.java`, June reads each line of the index file and splits it by the NUL character into exactly three parts: hash, mode, and path.
-- These entries are loaded into a sorted map. This ensures that files are always listed in alphabetical order when saved.
+- The index file (`.june/index`) collects workspace modifications to prepare them for commits.
+- June uses a simple flat text format instead of a binary cache. This makes the index easy to inspect and debug. Slashes are normalized to `/` to avoid platform incompatibilities, and NUL (`\0`) is used as a delimiter because it is an invalid character in filenames.
+- In `Index.java`, June reads the index file line-by-line and splits each line by the NUL character into exactly 3 parts: hash, mode, and path.
+- These are loaded into a `TreeMap` sorted by relative path. This ensures that tree objects built from the index are always serialized in deterministic alphabetical order.
 
 ```java
 public Index(File indexFile) throws IOException {
@@ -150,9 +156,9 @@ public Index(File indexFile) throws IOException {
 
 ### Configuration Management
 
-- Local settings are saved in `.june/config` so users can set a username and email for the repository.
-- June uses the standard Java properties format, which avoids writing custom parsing code or using external libraries.
-- In `Config.java`, June loads settings from `.june/config` and returns the value for the requested key. If the repository does not exist or the key is missing, it returns `null`.
+- Local settings are saved in `.june/config` to allow users to specify a local username and email for commits within a specific repository.
+- Using the standard properties format is clean because the JDK already has a built-in properties loader, which avoids the need to write custom parsing code or add external library dependencies.
+- In `Config.java`, June loads properties from `.june/config` and returns the stored value for the requested key. If the repository does not exist or the key is missing, it returns `null`.
 
 ```java
 public static String get(Repository repo, String key) {
@@ -174,18 +180,18 @@ public static String get(Repository repo, String key) {
 
 ### Object Storage Layout
 
-Objects are saved under `.june/objects/`. June groups objects into directories using the first two characters of their SHA-1 hash (for example, hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This stops any single directory from having too many files, which can slow down the filesystem. Objects are compressed to save space and are capped at 10MB to avoid using too much memory.
+Objects live under `.june/objects/`. June partitions objects using a two-character subdirectory prefix based on the object's SHA-1 hash (e.g. hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This partitioning avoids OS filesystem performance issues that occur when a single directory contains too many files. Objects are compressed using zlib (`DeflaterOutputStream` and `InflaterInputStream`) and are capped at 10MB in memory to prevent memory exhaustion.
 
 ## 3. Object Hashing and Serialization Formats
 
 ### The Object Header Format
 
-Before writing an object to disk or computing its SHA-1 hash, June adds a standard header at the beginning:
+Before writing an object to disk or computing its SHA-1 hash, June prepends a standard header:
 `[Object Type] [Payload Length in Bytes]\0[Payload Body Bytes]`
 
-- The header specifies the object type and size.
-- Using a NUL byte at the end of the header lets June read the type and size before allocating memory for the rest of the file.
-- In `ObjectData.java`, the header prefix is written to a byte array, followed by the body data.
+- The header structure separates object types and sizing directly at the start of the payload.
+- Prepending this metadata with a NUL byte boundary ensures the reader can parse the type and content length before allocating memory buffers for the body bytes.
+- In `ObjectData.java`, the header prefix is written to a byte array, followed by the raw body data.
 
 ```java
 public byte[] serialize() {
@@ -199,7 +205,7 @@ public byte[] serialize() {
 
 ### Commit Objects
 
-A commit object links a directory to its parent commits and contains the author, committer, timestamp, and message. It is saved as plain text:
+A commit object links a directory tree to its parent commits and contains author, committer, timestamp, and message metadata. Its payload is formatted as plain text:
 
 ```text
 tree [tree_sha1]
@@ -210,9 +216,9 @@ committer [name] <[email]> [timestamp] [timezone]
 [commit message]
 ```
 
-- Using a key-value header format makes the commit details easy to read and validate.
-- Placing a blank line before the commit message separates the headers from the message body. This allows the parser to read them line-by-line easily.
-- In `Commit.java`, June reads the lines one by one. When it sees a blank line, it treats everything after it as the commit message.
+- Using a simple key-value header format simplifies parsing and metadata validation.
+- Placing a blank line boundary before the commit message body separates structured variables from unstructured, free-form text, letting the parser read them line-by-line without complex tokenizers.
+- In `Commit.java`, June reads lines sequentially. When it encounters a blank line, it treats all subsequent lines as the commit message.
 
 ```java
 public Commit(byte[] rawData) {
@@ -252,7 +258,7 @@ public Commit(byte[] rawData) {
 
 ### Tree Objects
 
-A tree object represents a directory. It lists file modes, file names, and their SHA-1 hashes. Trees are saved as binary data:
+A tree object represents a directory listing, mapping file modes and names to their respective SHA-1 hashes. Trees are serialized as binary data payloads containing repeating entries:
 `[Octal File Mode] [Entry Name]\0[20-Byte Binary SHA-1]`
 
 ```java
@@ -269,9 +275,9 @@ private static byte[] serialize(List<Entry> entries) {
 
 #### Directory Sorting Logic
 
-- When sorting files and directories, directories are grouped with files that share the same prefix.
-- Adding a virtual slash (`/`) to directory names during sorting keeps the sorting consistent.
-- This is done in the `compareTo` method of the `Entry` record, which compares directory names with a `/` suffix.
+- When sorting files and directories together, directories should be grouped relative to files that share the same prefix.
+- Appending a virtual trailing slash (`/`) to directory names during sorting forces them to sort consistently, avoiding duplicate entries or inconsistent trees.
+- This is implemented via a custom `compareTo` method in the `Entry` record where directories are compared with a `/` suffix.
 
 ```java
 public record Entry(String mode, String name, String sha1) implements Comparable<Entry> {
@@ -286,9 +292,9 @@ public record Entry(String mode, String name, String sha1) implements Comparable
 
 #### Binary Parser Logic
 
-- Tree objects are saved as binary files to save space.
-- June parses the raw bytes directly using offsets to find spaces and NUL characters. It does not convert the binary data to a string, as that would corrupt the binary hashes.
-- The parser loops through the binary data, scanning for spaces to find the mode, scanning for NUL characters to find the path name, and reading the next 20 bytes for the hash.
+- Tree objects are saved as binary structures to save space.
+- June parses the byte array directly using offsets to find spaces and NUL characters rather than translating the entire binary object to a string, which would corrupt binary hashes.
+- The parser iterates through the binary payload, scanning for space (extracting the mode), scanning for NUL (extracting the path name), and reading the next 20 bytes for the hash.
 
 ```java
 private static List<Entry> parseEntries(byte[] data) {
@@ -318,13 +324,13 @@ private static List<Entry> parseEntries(byte[] data) {
 
 ## 4. Transaction Safety and File Locking
 
-June locks files to stop multiple commands from modifying the same file at the same time and corrupting it.
+June uses atomic filesystem lock files to ensure operations do not corrupt index or reference states during concurrent modifications.
 
-- If more than one command modifies the index or a branch pointer at the same time, the files can become corrupt.
-- To prevent this, June writes changes to a temporary file ending in `.lock`. Once writing is finished, it renames the lock file to replace the original. This ensures the file is never left half-written.
-- Creating the lock file is atomic, which prevents two processes from grabbing the lock at the same time.
-- Before writing to files like the index or branch references, June tries to create a lock file (like `index.lock` or `main.lock`).
-- If the lock file already exists, June checks how old it is. If it is older than 5 minutes, June deletes the stale lock and tries to create a new one.
+- If multiple processes modify the index or a branch pointer at the same time, the file could end up corrupted.
+- Writing modifications to a temporary lock file and then renaming it atomically ensures that the target file is never left in a partially written state.
+- `File.createNewFile()` is atomic under the hood, ensuring a lock is obtained without race conditions.
+- Before writing to critical paths (like `.june/index` or references under `.june/refs/`), June attempts to create a lock file with a `.lock` extension (e.g. `index.lock` or `refs/heads/main.lock`).
+- If the file creation fails because a lock exists, it checks the lock timestamp. If it is older than 5 minutes (customizable via `june.lock.staleMillis`), the active process deletes the stale lock file and attempts to recreate it.
 
 ```java
 static void acquireOrBreak(File lock) throws IOException {
@@ -350,11 +356,11 @@ static void acquireOrBreak(File lock) throws IOException {
 
 ### The Myers Diff Algorithm (`XDiff.java`)
 
-June compares text files using the Myers Diff algorithm. It takes two lists of text lines and finds the shortest path of changes between them.
+June calculates changes between text versions using the Myers Diff algorithm. It processes two lists of string lines, searching for the shortest edit script (SES) in a diagonal grid.
 
-- The Myers algorithm finds the minimum number of additions and deletions needed to change one file into another.
-- It produces clean diffs with low memory usage by searching along diagonal paths.
-- The algorithm searches through different edit distances, finding the furthest path for each step and saving the history:
+- The Myers algorithm finds the minimum number of insertions and deletions needed to transform one file into another.
+- It generates clean diffs with low memory overhead by searching diagonal paths.
+- The search runs through progressive edit distances $d$ from $0$ to $N+M$ along diagonal paths defined by $k = x - y$. At each step, it selects the transition that reaches furthest in the $x$ direction, matches identical lines along that diagonal, and saves the history:
 
 ```java
 for (d = 0; d <= max; d++) {
@@ -381,7 +387,7 @@ for (d = 0; d <= max; d++) {
   if (found) break;
 }
 ```
-- Once the path is found, June walks backward through the saved history to identify additions, deletions, and unchanged lines:
+- After finding the end coordinate, June walks backward through the `history` states to trace the edit path, identifying additions, deletions, and unchanged lines:
 
 ```java
 for (int step = d; step >= 1; step--) {
@@ -408,15 +414,15 @@ for (int step = d; step >= 1; step--) {
   y = xPrev - kPrev;
 }
 ```
-- These changes are grouped into hunks with 3 lines of unchanged text around them. If two changes are close to each other, they are merged into a single hunk.
+- These operations are grouped into unified diff hunks with 3 lines of unchanged context (`CONTEXT_LINES = 3`). If changes are separated by less than 6 lines of context ($2 \times CONTEXT\_LINES$), they are consolidated into a single hunk.
 
 ### Glob Patterns and Ignore Rules (`IgnoreRules.java`)
 
-June reads `.juneignore` files to ignore specific files and directories (like build folders or temporary files).
+June parses `.juneignore` files to exclude files like build directories or local caches.
 
-- Java's standard string matching uses regular expressions.
-- Converting glob patterns (like `*.log`) into regular expressions allows June to reuse Java's fast built-in matcher instead of writing a custom parser.
-- June translates glob wildcards to Java regular expressions:
+- Java's standard string matching (`String.matches`) uses regex.
+- Translating glob patterns into regular expressions allows us to reuse the JDK's fast regex implementation instead of writing a custom glob parser.
+- June translates wildcards to standard Java regular expressions:
   * Double asterisks `**` match directories recursively (`.*`).
   * Single asterisks `*` match characters only within a single directory segment (`[^/]*`).
   * Question marks `?` match any single character except a path separator (`[^/]`).
@@ -444,14 +450,14 @@ private static String globToRegex(String glob) {
   return sb.append("$").toString();
 }
 ```
-- Pattern rules starting with `!` include files instead of ignoring them. Patterns anchored at the root directory must match from the top level, while other patterns match any segment of the file path.
+- Negations (`!`) include matched files. Root-anchored patterns (starting with `/` or containing a slash but not ending with one) must match starting from the root directory. Other patterns split the path by `/` and match each segment individually.
 
 ### Conflict Detection, Workspace Sync, and Merging (`Helper.java` and `Merge.java`)
 
 Before modifying workspace files during checkout, reset, or merge, June checks for conflicts.
 
-- This check ensures that your unstaged changes or untracked files are not accidentally overwritten.
-- June compares the target commit, the staging index, and the files on disk.
+- This validation step ensures that local unstaged changes or untracked workspace files are not overwritten by checkout or merge.
+- June compares the target tree, index entries, and physical files on disk:
 
 ```java
 public static void checkConflicts(
@@ -492,13 +498,13 @@ public static void checkConflicts(
   // If local or untracked is not empty, throws an OperationException listing files
 }
 ```
-If there are no conflicts, June updates the workspace by deleting files that are not in the target commit, writing the new files (including links and executable files), and updating the index.
+Once conflict checks pass, June updates the workspace by deleting files missing from the target commit, writing target commit files (recreating symbolic links or regular executable files), and updating the staging index.
 
 #### Ancestry Traversal (BFS Search)
 
-Checking if a commit is an ancestor of another commit is required to validate merges and branch deletions. This check determines if a merge can be fast-forwarded or if a branch is safe to delete.
+Verifying if a specific commit exists within the direct ancestry tree of another commit is necessary to validate branch deletions and merge actions. Ancestry validation determines if a merge can be fast-forwarded or if a branch can be safely deleted.
 
-In `Helper.isAncestor()`, June searches the commit history graph using a queue and a visited set to find ancestors safely:
+In `Helper.isAncestor()`, June performs a BFS using a queue and a visited set to traverse history graphs safely:
 
 ```java
 public static boolean isAncestor(Repository repo, String ancestorSha, String descendentSha)
@@ -553,23 +559,23 @@ In `june.lib.Merge.merge()`, June performs the following logical checks and oper
 
 ## 6. System Operations and Low-Level Behaviors
 
-This section explains how June handles specific situations and settings.
+This section explains the low-level routines, edge cases, and design choices implemented inside June.
 
 ### 1. User Identity Resolution
 
-- June uses a series of fallbacks to find the username and email for commits.
-- This ensures every commit has a valid author name and email, even if they are not configured.
-- When creating a commit, June resolves the name and email by checking:
-  1. The local config file (`user.name` and `user.email`).
+- Determining username and email metadata for commit objects requires a robust fallback chain.
+- This ensures June can always record a valid author signature for commits, even if the user has not configured their name or email details.
+- When creating a commit in `june.lib.Commit`, June resolves the username and email by checking sources in the following order:
+  1. Local repository config properties (`user.name` and `user.email`).
   2. The system environment variable `USER`.
-  3. The Java system property `user.name` (defaults to `"June User"` if not set).
-  4. For the fallback email, June converts the name to lowercase, removes spaces, and adds `@localhost`.
+  3. The Java system property `user.name` (defaults to `"June User"` if null).
+  4. For the email fallback, it sanitizes the resolved name (converting to lowercase and stripping all whitespaces) and appends `@localhost`.
 
 ### 2. Binary File Identification
 
-- It is important to detect if a file contains binary data (like images or archives) rather than plain text.
-- Running text comparison algorithms on binary files is slow, uses too much memory, and prints unreadable text. Checking a small part of the file is fast and prevents this.
-- In `Helper.isBinary()`, June scans the first 8,000 bytes of the file. If it finds a NUL (`0`) byte, the file is treated as binary, and June prints `Binary files differ` instead of a line-by-line diff:
+- Detecting if a file contains binary content rather than plain text is critical.
+- Performing line-based diff algorithms on binary assets (like images or zip archives) is slow, consumes large amounts of memory, and produces garbled console output. Scanning a small block of bytes is fast and prevents these issues.
+- In `Helper.isBinary(byte[] data)`, June scans up to the first 8,000 bytes of the file. If it encounters a NUL (`0`) byte, the file is treated as binary, and diff calculators output `Binary files differ` instead of a unified diff:
 
 ```java
 public static boolean isBinary(byte[] data) {
@@ -584,9 +590,9 @@ public static boolean isBinary(byte[] data) {
 
 ### 3. Short SHA-1 Lookup and Ambiguity Resolution
 
-- Finding a full 40-character hash from a short prefix (like `a94a8f`) makes June easier to use.
-- Typing the full hash is tedious, but a short prefix must be checked carefully to avoid matching more than one file.
-- In `Helper.resolveShortSha1()`, June requires the prefix to be at least 4 characters long. It searches the matching objects directory for files that start with the prefix. If no match is found, it returns `null`. If more than one file matches, it throws an error stating that the short hash is ambiguous.
+- Resolving abbreviated commit hashes (like `a94a8f`) to their full 40-character target hashes improves usability.
+- Typing out a full 40-character hash is tedious. Letting users type short prefixes is standard, but the lookup logic must validate the prefix length to avoid collision risks and fail gracefully if a prefix matches multiple objects.
+- In `Helper.resolveShortSha1()`, June enforces that the search prefix must be at least 4 characters long. It looks in the `.june/objects/[first-two-chars]` directory for any files that begin with the remaining characters of the prefix. If no match is found, it returns null. If more than one file matches, it throws a `june.OperationException` indicating the short SHA-1 is ambiguous.
 
 ```java
 public static String resolveShortSha1(File repoDir, String shortSha1) {
@@ -614,34 +620,34 @@ public static String resolveShortSha1(File repoDir, String shortSha1) {
 
 ### 4. Status Path Collapsing
 
-- Grouping untracked files in the same directory under a single folder name keeps the status output clean.
-- If you have an untracked directory containing many files, listing all of them would clutter the console.
-- In `june.lib.Status.status()`, if a folder is untracked and none of its files are tracked, June lists only the folder path (e.g., `dir/`) instead of listing every file inside it.
+- Collapsing multiple untracked files in the same directory into a single folder indicator keeps command output readable.
+- If a user has an untracked directory containing thousands of build files, listing every single file in `june status` would clutter the console and make the output unreadable.
+- In `june.lib.Status.status()`, if a workspace file is not tracked in the index, June extracts the top-level folder name (e.g. `dir/`). If no files in that folder prefix are currently tracked, status lists only the collapsed directory path rather than each individual child path.
 
 ### 5. Platform-Independent Link and Permission Mapping
 
-- Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
-- Links and executable settings are important for scripts and builds, but operating systems handle them differently.
-- June uses standard Java features in `Helper.java`. `Helper.entryMode()` checks if a file is a symbolic link to apply the `120000` mode, and checks if it is executable to apply the `100755` mode.
-- The destination of a symbolic link is read as a string and saved as the file content.
-- During checkout, if a file mode is `120000`, June recreates the symbolic link. If the mode is `100755`, it writes the file and marks it as executable.
+- Capturing and restoring executable permission flags (`100755`) and symbolic link metadata (`120000`) is required to support cross-platform checkouts.
+- Symbolic links and executable permissions are important for scripts and builds, but standard Java file attributes vary across operating systems.
+- June uses standard JDK Java NIO paths in `Helper.java`. `Helper.entryMode(File file)` checks `Files.isSymbolicLink()` to apply the `120000` mode, and `file.canExecute()` to apply the `100755` mode.
+- The target path of a symbolic link is read as a string and stored as the raw blob payload.
+- During checkout/restore, if the entry mode is `120000`, June deletes the old path and recreates the symbolic link using `Files.createSymbolicLink()`. If the mode is `100755`, it writes the regular file and calls `dest.setExecutable(true)`.
 
 ## 7. Dependencies & Build Requirements
 
-June does not use any external packages. It is written in pure Java and only uses standard library packages:
+June has zero external software dependencies. It is written in pure Java and relies exclusively on standard JDK library packages.
 
 ### Required Standard Packages
 
-* `java.io`: Handles file and directory reading and writing.
-* `java.nio`: Handles path resolution, symbolic links, and file movements.
-* `java.security`: Provides the SHA-1 hashing classes.
-* `java.util`: Provides lists, maps, and property utilities.
-* `java.util.zip`: Handles file compression.
-* `java.time`: Handles date and time for commits.
+* `java.io`: Handles file, directory, stream, and reader processes.
+* `java.nio`: Provides path resolution, symbolic link utilities, and file system movements.
+* `java.security`: Provides the `MessageDigest` class used for SHA-1 computations.
+* `java.util`: Provides collections (`TreeMap`, `ArrayList`), formatter utilities, and configuration properties.
+* `java.util.zip`: Provides `DeflaterOutputStream` and `InflaterInputStream` for zlib object compression.
+* `java.time`: Manages timestamps and timezone offsets for commit records.
 
-## 8. System Implementation Sequence and Class Dependency Reference
+## 8. System Implementation Sequence and Class Dependency Guide
 
-This section outlines how each class is built and how they work together.
+This section outlines the progressive construction and validation sequence for the codebase, detailing how each component integrates with neighboring systems.
 
 ### 1. Hashing Library & Serialization Models (`Sha1.java`, `ObjectData.java`, `Tree.java`, and `Commit.java`)
 
@@ -678,24 +684,24 @@ This section outlines how each class is built and how they work together.
 * **Role**: Houses the logical workflows for all version control commands, managing state changes across the index, object store, and ref paths.
 * **Integrations**: Exposes structured domain results and programmatic exceptions that downstream callers utilize.
 
-### 8. CLI commands (App.java and default package commands)
+### 8. CLI Command wrappers (App.java and default package commands)
 
 * **Role**: Parses command arguments, maps parameters, triggers library actions, and outputs text messages to standard output or error.
 * **Integrations**: Acts as the user interface adapter that programmatically wraps library operations.
 
 ## 9. Programmatic API Integration and Thread Safety
 
-Because the core library is separate from the command-line parser, June can be used directly inside other programs (like a graphical interface, web server, or IDE plugin). This allows you to manage repositories directly in Java without running terminal commands.
+Because the repository and logical workflows are entirely decoupled from the command line parser (`cmd/`), June can be embedded directly as a dependency inside other JVM-based programs (such as GUI clients, web application servers, or IDE plugins). This allows you to manage snapshots and history programmatically in a thread-safe manner without invoking the command-line interface or spawning subprocesses.
 
-### Thread Safety
+### Thread Isolation and Instance Safety
 
-When using June in a multi-threaded program:
-- Creating a `Repository` using `new Repository(workspaceDir, customMetadataDir)` keeps all files, index states, and locks isolated to that specific instance.
-- This avoids using shared settings and ensures that multiple threads can work on different repositories at the same time without conflicts.
+When embedded inside a multi-threaded application (such as a web server handling concurrent repository requests):
+- Instantiating a `Repository` using the overloaded constructor `new Repository(workspaceDir, customMetadataDir)` ensures that all metadata operations, index states, database storage, and lock configurations remain fully scoped to that specific repository instance.
+- This avoids shared global state (like JVM system properties or environment variables) and prevents concurrent database corruption or cross-repository contamination between threads.
 
-### Programmatic Example
+### Code Example: Programmatic Operations
 
-Below is a Java example showing how to initialize a repository, stage files, check status, and commit changes using the library:
+Below is a complete Java code example showing how to initialize a repository, stage files, query status, and record a commit programmatically using only the library APIs:
 
 ```java
 import june.Repository;
@@ -739,29 +745,30 @@ public class ProgrammaticExample {
 
 ---
 
-# June
+# June Commands Reference Manual
 
-June commands parse user inputs, check arguments, and run the library code.
+June command endpoints parse inputs, enforce validation rules, and route arguments to the `june.lib` library.
 
 ## 1. Command Syntax and Router Dispatch
 
-The main entry point is the `App` class in the `cmd` directory. When you run a command:
-1. `App.main` gets the command name from the first argument (`args[0]`).
-2. It splits the rest of the arguments to pass to the specific command handler.
-3. It sets up the repository controller: `new Repository(new File("."))`. (If `JUNE_DIR` or `june.dir` is set, it uses that path instead of the current directory).
-4. It checks if the repository exists (except for the `init` command).
-5. It runs the correct command handler.
+The entry point of the command interface is the `App` class in the `cmd` directory. When a user runs a command from the shell:
+1. `App.main` parses the command name from the first argument (`args[0]`).
+2. Slices the remaining arguments using `Arrays.copyOfRange(args, 1, args.length)` to isolate the parameters for the specific command.
+3. Instantiates the repository state controller (`new Repository(new File("."))`).
+   - Note: The `Repository` constructor checks for the JVM system property `june.dir` or the system environment variable `JUNE_DIR` to determine the custom parent directory for the `.june` metadata directory. If either is set, it resolves `.june` relative to that path.
+4. Checks if the repository exists on disk (unless the command is `init`).
+5. Dispatches execution to the corresponding command handler class directly in the `cmd` project (default package).
 
-If a command fails, it throws a `june.OperationException`. `App.main` catches this error, prints the message, and exits with a code of 1.
+If a command fails because of invalid input or runtime errors, the command wrapper throws a `june.OperationException`. `App.main` catches this exception, prints the clean message to standard error, and calls `System.exit(1)`.
 
 ## 2. Command Specifications
 
 ### 1. `init`
 
 * **Syntax**: `june init`
-- You must initialize the repository before running other commands.
-- Initializing the repository creates the required directories. If the `HEAD` reference is missing, June points it to the `main` branch.
-- In `Init`, June calls `repo.init()` to create `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/`.
+- Setting up a repository directory structure is necessary before running any other version control operations.
+- Creating the database directories initializes a fresh tracking scope. If the HEAD reference file is missing, June writes a default pointer targeting the main branch.
+- In `june.cmd.Init`, June invokes `repo.init()` which generates `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/` directories.
 
 ### 2. `add`
 
@@ -940,7 +947,7 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - Logging traverses parent hashes from HEAD and supports compact formatting and count limits.
 - In `june.cmd.Log`, June parses options like `--oneline`, `-n`, and `--max-count` to format and filter the output list.
 
-## 3. Class Design of the commands
+## 3. Class Design of the Command Wrappers
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.

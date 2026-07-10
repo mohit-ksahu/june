@@ -1,4 +1,6 @@
 jre
 june
+cmd
+versions
 *.class
 .DS_Store
