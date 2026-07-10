@@ -323,7 +323,25 @@ public class Repository {
   public june.lib.Status.StatusResult status() throws java.io.IOException {
     return june.lib.Status.status(this);
   }
+  public String checkout(String target) throws java.io.IOException {
+    return june.lib.Checkout.checkout(this, target);
+  }
   public String restore(java.util.List<String> paths, boolean staged) throws java.io.IOException {
     return june.lib.Restore.restore(this, paths, staged);
+  }
+  public String reset(String target) throws java.io.IOException {
+    return june.lib.Reset.reset(this, target);
+  }
+  public june.lib.Branch.BranchResult listBranches() throws java.io.IOException {
+    return june.lib.Branch.list(this);
+  }
+  public String createBranch(String name) throws java.io.IOException {
+    return june.lib.Branch.create(this, name);
+  }
+  public String deleteBranch(String name, boolean force) throws java.io.IOException {
+    return june.lib.Branch.delete(this, name, force);
+  }
+  public String renameBranch(String old, String newName) throws java.io.IOException {
+    return june.lib.Branch.rename(this, old, newName);
   }
 }

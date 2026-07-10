@@ -25,7 +25,10 @@ public class App {
         case "rm" -> Rm.run(repo, rest);
         case "commit" -> Commit.run(repo, rest);
         case "status" -> Status.run(repo, rest);
+        case "checkout" -> Checkout.run(repo, rest);
         case "restore" -> Restore.run(repo, rest);
+        case "reset" -> Reset.run(repo, rest);
+        case "branch" -> Branch.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {
