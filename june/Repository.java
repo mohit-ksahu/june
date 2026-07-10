@@ -344,4 +344,10 @@ public class Repository {
   public String renameBranch(String old, String newName) throws java.io.IOException {
     return june.lib.Branch.rename(this, old, newName);
   }
+  public java.util.List<String> listTags() {
+    return june.lib.Tag.list(this);
+  }
+  public String deleteTag(String name) throws java.io.IOException {
+    return june.lib.Tag.delete(this, name);
+  }
 }

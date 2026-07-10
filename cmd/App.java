@@ -29,6 +29,7 @@ public class App {
         case "restore" -> Restore.run(repo, rest);
         case "reset" -> Reset.run(repo, rest);
         case "branch" -> Branch.run(repo, rest);
+        case "tag" -> Tag.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

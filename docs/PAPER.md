@@ -47,6 +47,7 @@ public static void main(String[] args) {
       case "checkout" -> Checkout.run(repo, rest);
       case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
+      case "tag" -> Tag.run(repo, rest);
       case "reset" -> Reset.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
@@ -859,6 +860,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command requires a `--hard` flag to confirm that local modifications will be overwritten.
 - In `june.cmd.Reset`, June validates the hard reset flag and resolves the target commit hash.
 
+### 14. `tag`
+
+* **Syntax**: `june tag [-d] [<tag-name>] [<commit-sha1>]`
+- Tags represent permanent named references to specific commits.
+- The command lists existing tags, deletes reference files, or creates new tags pointing at HEAD or a resolved commit.
+- In `june.cmd.Tag`, June checks for tag deletion flags or name parameters to update tag references.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
@@ -871,6 +879,7 @@ Each command has a dedicated wrapper class under `cmd/` to separate argument par
 * **Restore.java**: Checks for `--staged` flags and path arrays.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
 * **Status.java**: Prints the results of the repository status call.
+* **Tag.java**: Parses tag listing, tag creation, or tag deletion flags.
 
 ## 4. Programmatic API Mapping
 
@@ -887,3 +896,4 @@ In addition to command-line execution, the library exposes all features via dire
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
 | **Reset State** | `repo.reset(String target)` | `Reset.java` |
 | **Branch Operations**| `repo.createBranch(name)` / `repo.listBranches()` / `repo.deleteBranch(name, force)` | `Branch.java` |
+| **Tag Operations** | `repo.createTag(name, sha)` / `repo.listTags()` / `repo.deleteTag(name)` | `Tag.java` |

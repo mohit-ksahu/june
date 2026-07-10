@@ -156,6 +156,24 @@ java -cp bin App branch -d feature-auth
 java -cp bin App branch -D feature-auth
 ```
 
+### 8. `tag` — Manage Tags
+
+Create, list, or delete reference tags:
+
+```bash
+# List all tags in the repository
+java -cp bin App tag
+
+# Create a tag pointing to the current commit
+java -cp bin App tag v1.0.0
+
+# Create a tag pointing to a specific commit hash or resolved ref
+java -cp bin App tag v1.0.0 a94a8f
+
+# Delete a tag
+java -cp bin App tag -d v1.0.0
+```
+
 ### 9. `checkout` — Switch Active States
 
 Switch the active branch or align workspace files with a tag/commit hash:
