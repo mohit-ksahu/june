@@ -4,37 +4,57 @@ June is a simple version control system written in Java.
 
 ## 1. System Design and Key Layers
 
-June is written in Java and does not use any external packages. The code is split into two layers to keep the storage logic and the user interface separate.
+June is written in Java and does not use any external packages. The code is split into three layers to keep the storage logic, the feature logic, and the user interface separate.
 
 ### Why split the code this way?
 
 Separating the command-line interface from the core storage logic keeps the codebase modular. This ensures the core logic is reusable and unaffected by changes to user commands.
 
-### The two layers:
+### The three layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, manages references, and compiles workspace ignore rules.
-2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
+1. **The Storage and Utility Library (`june`)**: This layer handles repository paths, reads and writes compressed objects, updates the staging index, compiles ignore rules, calculates diffs, and locks files to prevent write conflicts.
+2. **The Feature Library (`june.lib`)**: This layer implements the actual features (like staging, committing, checking out, and merging). It coordinates the storage layer and the workspace but does not deal with command parsing or flags.
+3. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
 
 - June routes all command-line inputs through `App.java` in the `cmd/` directory.
 - By keeping command routing separate, other programs can call the library directly without needing to validate user commands.
-- The main entry point splits the arguments so that each command handler only gets the arguments it needs. It then sets up the repository directory path and runs the correct command handler.
+- The main entry point splits the arguments so that each command handler only gets the arguments it needs. It then sets up the repository directory path, checks if the repository exists (except for the init command), and runs the correct command handler.
 
 ```java
-public static void main(String[] args) throws Exception {
+public static void main(String[] args) {
   if (args.length == 0) {
-    System.out.println("Usage: java App <command> [<args>]");
-    System.exit(1);
-  }
-  String cmd = args[0];
-  if (cmd.equals("init")) {
-    Repository repo = new Repository(new File("."));
-    repo.init();
-    System.out.println("Initialized empty June repository in .june/");
+    printUsage();
     return;
   }
-  System.out.println("Unknown command: " + cmd);
+  String command = args[0];
+  try {
+    Repository repo = new Repository(new File("."));
+    String[] rest = Arrays.copyOfRange(args, 1, args.length);
+    if (command.equals("init")) {
+      Init.run(repo, rest);
+      return;
+    }
+    if (!repo.exists()) {
+      throw new OperationException("fatal: not a june repository (or any of the parent directories): .june");
+    }
+    switch (command) {
+      case "add" -> Add.run(repo, rest);
+      default -> {
+        System.err.println("june: '" + command + "' is not a june command.");
+        printUsage();
+        System.exit(1);
+      }
+    }
+  } catch (OperationException e) {
+    System.err.println(e.getMessage());
+    System.exit(1);
+  } catch (Exception e) {
+    System.err.println("fatal: " + e.getMessage());
+    e.printStackTrace();
+    System.exit(1);
+  }
 }
 ```
 
@@ -289,6 +309,68 @@ static void acquireOrBreak(File lock) throws IOException {
 
 ## 5. System Algorithms and Logic
 
+### The Myers Diff Algorithm (`XDiff.java`)
+
+June compares text files using the Myers Diff algorithm. It takes two lists of text lines and finds the shortest path of changes between them.
+
+- The Myers algorithm finds the minimum number of additions and deletions needed to change one file into another.
+- It produces clean diffs with low memory usage by searching along diagonal paths.
+- The algorithm searches through different edit distances, finding the furthest path for each step and saving the history:
+
+```java
+for (d = 0; d <= max; d++) {
+  int[] vClone = v.clone();
+  for (int k = -d; k <= d; k += 2) {
+    boolean down = (k == -d || (k != d && vClone[max + k - 1] < vClone[max + k + 1]));
+    int kPrev = down ? k + 1 : k - 1;
+
+    int xStart = vClone[max + kPrev];
+    int x = down ? xStart : xStart + 1;
+    int y = x - k;
+
+    while (x < n && y < m && originalLines.get(x).equals(newLines.get(y))) {
+      x++;
+      y++;
+    }
+    v[max + k] = x;
+    if (x >= n && y >= m) {
+      found = true;
+      break;
+    }
+  }
+  history.add(v.clone());
+  if (found) break;
+}
+```
+- Once the path is found, June walks backward through the saved history to identify additions, deletions, and unchanged lines:
+
+```java
+for (int step = d; step >= 1; step--) {
+  int k = x - y;
+  int[] vPrev = history.get(step - 1);
+  boolean down = (k == -step || (k != step && vPrev[max + k - 1] < vPrev[max + k + 1]));
+  int kPrev = down ? k + 1 : k - 1;
+
+  int xPrev = vPrev[max + kPrev];
+  int xTrans = down ? xPrev : xPrev + 1;
+
+  while (x > xTrans) {
+    x--; y--;
+    ops.add(new DiffOp(' ', x + 1, y + 1, originalLines.get(x)));
+  }
+  if (down) {
+    y--;
+    ops.add(new DiffOp('+', -1, y + 1, newLines.get(y)));
+  } else {
+    x--;
+    ops.add(new DiffOp('-', x + 1, -1, originalLines.get(x)));
+  }
+  x = xPrev;
+  y = xPrev - kPrev;
+}
+```
+- These changes are grouped into hunks with 3 lines of unchanged text around them. If two changes are close to each other, they are merged into a single hunk.
+
 ### Glob Patterns and Ignore Rules (`IgnoreRules.java`)
 
 June reads `.juneignore` files to ignore specific files and directories (like build folders or temporary files).
@@ -329,7 +411,24 @@ private static String globToRegex(String glob) {
 
 This section explains how June handles specific situations and settings.
 
-### 1. Platform-Independent Link and Permission Mapping
+### 1. Binary File Identification
+
+- It is important to detect if a file contains binary data (like images or archives) rather than plain text.
+- Running text comparison algorithms on binary files is slow, uses too much memory, and prints unreadable text. Checking a small part of the file is fast and prevents this.
+- In `Helper.isBinary()`, June scans the first 8,000 bytes of the file. If it finds a NUL (`0`) byte, the file is treated as binary, and June prints `Binary files differ` instead of a line-by-line diff:
+
+```java
+public static boolean isBinary(byte[] data) {
+  for (int i = 0; i < Math.min(data.length, 8000); i++) {
+    if (data[i] == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+### 2. Platform-Independent Link and Permission Mapping
 
 - Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
 - Links and executable settings are important for scripts and builds, but operating systems handle them differently.
@@ -379,6 +478,61 @@ This section outlines how each class is built and how they work together.
 * **Role**: Parses pattern lists, compiles glob rules to regular expressions, searches workspaces recursively, and identifies local conflicts.
 * **Integrations**: Filters files during index staging operations and prevents active checkouts or merges from overwriting modified workspace files.
 
+### 6. Line Diff Algorithm (`XDiff.java` and `Modes.java`)
+
+* **Role**: Runs Myers diagonal searches, tracks edit history coordinates, and formats line differences into unified hunks.
+* **Integrations**: Computes changes between the staging index, HEAD commits, and physical workspace files for display by the diff operations.
+
+### 7. Feature Command Controllers (`june.lib.*`)
+
+* **Role**: Houses the logical workflows for all version control commands, managing state changes across the index, object store, and ref paths.
+* **Integrations**: Exposes structured domain results and programmatic exceptions that downstream callers utilize.
+
+### 8. CLI commands (App.java and default package commands)
+
+* **Role**: Parses command arguments, maps parameters, triggers library actions, and outputs text messages to standard output or error.
+* **Integrations**: Acts as the user interface adapter that programmatically wraps library operations.
+
+## 9. Programmatic API Integration and Thread Safety
+
+Because the core library is separate from the command-line parser, June can be used directly inside other programs (like a graphical interface, web server, or IDE plugin). This allows you to manage repositories directly in Java without running terminal commands.
+
+### Thread Safety
+
+When using June in a multi-threaded program:
+- Creating a `Repository` using `new Repository(workspaceDir, customMetadataDir)` keeps all files, index states, and locks isolated to that specific instance.
+- This avoids using shared settings and ensures that multiple threads can work on different repositories at the same time without conflicts.
+
+### Programmatic Example
+
+Below is a Java example showing how to initialize a repository, stage files, check status, and commit changes using the library:
+
+```java
+import june.Repository;
+import java.io.File;
+import java.util.List;
+
+public class ProgrammaticExample {
+    public static void main(String[] args) throws Exception {
+        File workspace = new File("/path/to/my/project");
+        File customMetadataDir = new File("/path/to/custom/metadata/parent");
+
+        // 1. Instantiate the Repository (fully thread-safe, isolated per instance)
+        Repository repo = new Repository(workspace, customMetadataDir);
+
+        // 2. Initialize the repository directory structures
+        repo.init();
+        System.out.println("Repository initialized!");
+
+        // 3. Stage changes (equivalent to `june add`)
+        repo.add(List.of("src/Main.java", "README.md"));
+        System.out.println("Files staged successfully.");
+    }
+}
+```
+
+---
+
 # June
 
 June commands parse user inputs, check arguments, and run the library code.
@@ -387,13 +541,51 @@ June commands parse user inputs, check arguments, and run the library code.
 
 The main entry point is the `App` class in the `cmd` directory. When you run a command:
 1. `App.main` gets the command name from the first argument (`args[0]`).
-2. It sets up the repository controller: `new Repository(new File("."))`. (If `JUNE_DIR` or `june.dir` is set, it uses that path instead of the current directory).
+2. It splits the rest of the arguments to pass to the specific command handler.
+3. It sets up the repository controller: `new Repository(new File("."))`. (If `JUNE_DIR` or `june.dir` is set, it uses that path instead of the current directory).
+4. It checks if the repository exists (except for the `init` command).
+5. It runs the correct command handler.
+
+If a command fails, it throws a `june.OperationException`. `App.main` catches this error, prints the message, and exits with a code of 1.
 
 ## 2. Command Specifications
 
 ### 1. `init`
 
 * **Syntax**: `june init`
-- Setting up a repository directory structure is necessary before running any other version control operations.
-- Creating the database directories initializes a fresh tracking scope. If the HEAD reference file is missing, June writes a default pointer targeting the main branch.
-- In `init`, June invokes `repo.init()` which generates `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/` directories.
+- You must initialize the repository before running other commands.
+- Initializing the repository creates the required directories. If the `HEAD` reference is missing, June points it to the `main` branch.
+- In `Init`, June calls `repo.init()` to create `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/`.
+
+### 2. `add`
+
+* **Syntax**: `june add <file>...`
+- Staging changed files is required to prepare a snapshot of the workspace for a future commit.
+- The command checks if the user provided at least one path target. It then resolves each argument to add regular files, walk directories recursively, or remove entries if files have been deleted on disk.
+- In `Add`, June validates the arguments length. If empty, it throws a user-facing operation error; otherwise, it converts the array to a list and routes execution to the repository staging workflow: `repo.add()`.
+
+```java
+public static void run(Repository repo, String[] args) throws IOException {
+  if (args.length == 0) {
+    throw new OperationException("nothing specified, nothing added");
+  }
+  repo.add(Arrays.asList(args));
+}
+```
+- Validating the arguments length before invoking the staging workflow prevents empty stages from running.
+- Passing the arguments as a standard Java list ensures compatibility with collection walking methods.
+
+## 3. Class Design of the commands
+
+Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
+* **Add.java**: Parses path lists and calls `repo.add()`.
+* **Init.java**: Calls the repository initialization method directly.
+
+## 4. Programmatic API Mapping
+
+In addition to command-line execution, the library exposes all features via direct method calls on `june.Repository` or the logical classes inside `june.lib`. This makes June fully usable as a standalone programmatic library:
+
+| VCS Concept | Library API Invocation | CLI Command Shadowed |
+| :--- | :--- | :--- |
+| **Initialize** | `repo.init()` | `Init.java` |
+| **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
