@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, computes SHA-1 hashes, serializes objects, and compresses payloads using Zlib deflation.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -47,11 +47,40 @@ By default, June looks for or creates this directory in the current directory. I
 ```
 [workspace_root]/
 ├── .june/
+│   ├── index
 │   ├── refs/
 │   │   ├── heads/
 │   │   └── tags/
 │   └── objects/
+│       ├── [2-char hex]/
+│       │   └── [38-char hex]
 ```
+
+### Staging Index Layout
+
+- The index file (`.june/index`) lists files that are staged for the next commit.
+- June uses a plain text format for the index instead of a binary cache. This makes it easy to read and debug. It uses the NUL (`\0`) character to separate parts because NUL cannot be used in filenames, and normalizes all slashes to `/`.
+- In `Index.java`, June reads each line of the index file and splits it by the NUL character into exactly three parts: hash, mode, and path.
+- These entries are loaded into a sorted map. This ensures that files are always listed in alphabetical order when saved.
+
+```java
+public Index(File indexFile) throws IOException {
+  this.indexFile = indexFile;
+  if (indexFile.exists()) {
+    for (String line : Files.readAllLines(indexFile.toPath(), StandardCharsets.UTF_8)) {
+      if (line.isEmpty()) continue;
+      String[] parts = line.split("\0", 3);
+      if (parts.length == 3) {
+        entries.put(parts[2], new Entry(parts[0], parts[1], parts[2]));
+      }
+    }
+  }
+}
+```
+
+### Object Storage Layout
+
+Objects are saved under `.june/objects/`. June groups objects into directories using the first two characters of their SHA-1 hash (for example, hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This stops any single directory from having too many files, which can slow down the filesystem. Objects are compressed to save space and are capped at 10MB to avoid using too much memory.
 
 ## 3. Object Hashing and Serialization Formats
 
@@ -192,7 +221,6 @@ private static List<Entry> parseEntries(byte[] data) {
   return list;
 }
 ```
-
 ## 4. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
@@ -215,9 +243,20 @@ This section outlines how each class is built and how they work together.
 * **Role**: Establishes byte-level data serialization, SHA-1 hashing, and type-specific data mapping. `ObjectData.java` serves as the base model, while `Tree.java` (handling tree entry sorting and binary parsing) and `Commit.java` (handling parent reference list parsing and commit message extraction) inherit from it.
 * **Integrations**: Receives raw byte payloads, formats standard metadata headers, and performs hex conversions used across all storage and reference systems.
 
-### 2. Repository Metadata Model (`Repository.java` and `Modes.java`)
+### 2. Object Storage (`ObjectStore.java` and `ObjectTypes.java`)
+
+* **Role**: Implements zlib-compressed persistence, file reads/writes, and streaming access to the repository object database.
+* **Integrations**: Writes serialized object bytes to partitioned subdirectories based on computed SHA-1 hashes, and decompresses payload inputs up to a 10MB memory ceiling.
+
+### 3. Staging State (implemented in `Index.java`)
+
+* **Role**: Parses the plain-text NUL-separated staging database.
+* **Integrations**: Manages staging operations for adding and removing workspace paths, sorting entries alphabetically via an internal tree map structure.
+
+### 4. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
 * **Role**: Resolves local repository paths.
+* **Integrations**: Orchestrates interactions between the staging index, object storage, and ref sub-systems during checkouts and commits.
 
 # June
 

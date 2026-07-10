@@ -8,6 +8,8 @@ import june.ObjectTypes;
 import june.Tree;
 import june.Modes;
 import june.Commit;
+import june.ObjectStore;
+import june.Index;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -66,6 +68,46 @@ public class App {
       }
       byte[] compressed = june.Helper.compress(args[1].getBytes());
       System.out.println("Compressed length: " + compressed.length + " bytes");
+      return;
+    }
+    if (cmd.equals("write-object")) {
+      if (args.length < 3) {
+        System.out.println("Usage: java App write-object <type> <content>");
+        System.exit(1);
+      }
+      File tempDb = new File(".june_temp");
+      ObjectStore store = new ObjectStore(tempDb);
+      store.mkdirs();
+      ObjectData data = ObjectData.create(args[1], args[2].getBytes());
+      String sha = store.write(data);
+      System.out.println("Stored object SHA-1: " + sha);
+      deleteDir(tempDb);
+      return;
+    }
+    if (cmd.equals("read-object")) {
+      if (args.length < 2) {
+        System.out.println("Usage: java App read-object <sha1>");
+        System.exit(1);
+      }
+      File tempDb = new File(".june_temp");
+      ObjectStore store = new ObjectStore(tempDb);
+      store.mkdirs();
+      ObjectData data = store.read(args[1]);
+      System.out.println("Object type: " + data.getType() + ", size: " + data.getData().length + " bytes");
+      deleteDir(tempDb);
+      return;
+    }
+    if (cmd.equals("write-index")) {
+      if (args.length < 4) {
+        System.out.println("Usage: java App write-index <sha1> <mode> <path>");
+        System.exit(1);
+      }
+      File tempIndex = new File(".june_index_temp");
+      Index index = new Index(tempIndex);
+      index.add(args[1], args[2], args[3]);
+      index.write();
+      System.out.println("Added and wrote staging entry: " + args[3]);
+      tempIndex.delete();
       return;
     }
     System.out.println("Unknown command: " + cmd);
