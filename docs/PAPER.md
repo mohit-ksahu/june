@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, and manages branch and tag references.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, manages references, and compiles workspace ignore rules.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -287,7 +287,45 @@ static void acquireOrBreak(File lock) throws IOException {
 }
 ```
 
-## 5. Dependencies & Build Requirements
+## 5. System Algorithms and Logic
+
+### Glob Patterns and Ignore Rules (`IgnoreRules.java`)
+
+June reads `.juneignore` files to ignore specific files and directories (like build folders or temporary files).
+
+- Java's standard string matching uses regular expressions.
+- Converting glob patterns (like `*.log`) into regular expressions allows June to reuse Java's fast built-in matcher instead of writing a custom parser.
+- June translates glob wildcards to Java regular expressions:
+  * Double asterisks `**` match directories recursively (`.*`).
+  * Single asterisks `*` match characters only within a single directory segment (`[^/]*`).
+  * Question marks `?` match any single character except a path separator (`[^/]`).
+
+```java
+private static String globToRegex(String glob) {
+  StringBuilder sb = new StringBuilder("^");
+  for (int i = 0; i < glob.length(); i++) {
+    char c = glob.charAt(i);
+    if (c == '*') {
+      if (i + 1 < glob.length() && glob.charAt(i + 1) == '*') {
+        sb.append(".*");
+        i++;
+      } else {
+        sb.append("[^/]*");
+      }
+    } else if (c == '?') {
+      sb.append("[^/]");
+    } else if ("\\.[]{}()+-^$|".indexOf(c) != -1) {
+      sb.append("\\").append(c);
+    } else {
+      sb.append(c);
+    }
+  }
+  return sb.append("$").toString();
+}
+```
+- Pattern rules starting with `!` include files instead of ignoring them. Patterns anchored at the root directory must match from the top level, while other patterns match any segment of the file path.
+
+## 6. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
 
@@ -300,7 +338,7 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.util.zip`: Handles file compression.
 * `java.time`: Handles date and time for commits.
 
-## 6. System Implementation Sequence and Class Dependency Reference
+## 7. System Implementation Sequence and Class Dependency Reference
 
 This section outlines how each class is built and how they work together.
 
@@ -323,6 +361,11 @@ This section outlines how each class is built and how they work together.
 
 * **Role**: Resolves local repository paths, updates active HEAD pointer states (symbolic and detached), and manages local properties config storage.
 * **Integrations**: Orchestrates interactions between the staging index, object storage, and ref sub-systems during checkouts and commits.
+
+### 5. Ignore Rules and Path Traversal (`IgnoreRules.java` and `Helper.java`)
+
+* **Role**: Parses pattern lists, compiles glob rules to regular expressions, searches workspaces recursively, and identifies local conflicts.
+* **Integrations**: Filters files during index staging operations and prevents active checkouts or merges from overwriting modified workspace files.
 
 # June
 

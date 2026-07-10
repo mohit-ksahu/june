@@ -179,7 +179,7 @@ public class Repository {
     if (!refFile.delete()) {
       throw new IOException("fatal: could not delete branch ref: " + refFile);
     }
-    // Helper.deleteEmptyParentDirs(refFile.getParentFile(), headsDir);
+    Helper.deleteEmptyParentDirs(refFile.getParentFile(), headsDir);
     return sha;
   }
 
@@ -212,7 +212,7 @@ public class Repository {
     if (!refFile.delete()) {
       throw new IOException("fatal: could not delete tag ref: " + refFile);
     }
-    // Helper.deleteEmptyParentDirs(refFile.getParentFile(), tagsDir);
+    Helper.deleteEmptyParentDirs(refFile.getParentFile(), tagsDir);
     return sha;
   }
 
@@ -262,9 +262,19 @@ public class Repository {
     return new File(repoDir, ref);
   }
 
-  private static void validateRefPath(String path) {}
+  private static void validateRefPath(String path) {
+    if (path == null || path.isBlank() || path.contains("\0") || path.startsWith("/")
+        || path.contains("..") || path.contains("\\")) {
+      throw new OperationException("fatal: invalid ref path: " + path);
+    }
+  }
 
-  private static void validateRefName(String name) {}
+  private static void validateRefName(String name) {
+    if (name == null || name.isBlank() || name.contains("\0") || name.contains("..")
+        || name.startsWith("/") || name.contains("\\")) {
+      throw new OperationException("fatal: invalid ref name: " + name);
+    }
+  }
 
   public String writeFileOrSymlinkTarget(File target, String mode) throws IOException {
     if (mode.equals(Modes.SYMLINK)) {

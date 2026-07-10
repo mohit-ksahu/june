@@ -8,6 +8,7 @@ The implementation separates the command-line adapter layer from reusable reposi
 
 June supports a standard subset of operations:
 - **Repository Setup**: Initialize database directories (`.june/`) and configure default refs.
+- **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
 ## Codebase Structure
