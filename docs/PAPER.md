@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, computes SHA-1 hashes, serializes objects, and compresses payloads using Zlib deflation.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, computes SHA-1 hashes, serializes objects, and persists compressed objects to key-value file storage.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -51,7 +51,13 @@ By default, June looks for or creates this directory in the current directory. I
 │   │   ├── heads/
 │   │   └── tags/
 │   └── objects/
+│       ├── [2-char hex]/
+│       │   └── [38-char hex]
 ```
+
+### Object Storage Layout
+
+Objects are saved under `.june/objects/`. June groups objects into directories using the first two characters of their SHA-1 hash (for example, hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This stops any single directory from having too many files, which can slow down the filesystem. Objects are compressed to save space and are capped at 10MB to avoid using too much memory.
 
 ## 3. Object Hashing and Serialization Formats
 
@@ -215,7 +221,12 @@ This section outlines how each class is built and how they work together.
 * **Role**: Establishes byte-level data serialization, SHA-1 hashing, and type-specific data mapping. `ObjectData.java` serves as the base model, while `Tree.java` (handling tree entry sorting and binary parsing) and `Commit.java` (handling parent reference list parsing and commit message extraction) inherit from it.
 * **Integrations**: Receives raw byte payloads, formats standard metadata headers, and performs hex conversions used across all storage and reference systems.
 
-### 2. Repository Metadata Model (`Repository.java` and `Modes.java`)
+### 2. Object Storage (`ObjectStore.java` and `ObjectTypes.java`)
+
+* **Role**: Implements zlib-compressed persistence, file reads/writes, and streaming access to the repository object database.
+* **Integrations**: Writes serialized object bytes to partitioned subdirectories based on computed SHA-1 hashes, and decompresses payload inputs up to a 10MB memory ceiling.
+
+### 3. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
 * **Role**: Resolves local repository paths.
 

@@ -1,13 +1,9 @@
 package june;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+
 public class Repository {
   public static final String REPO_DIR = ".june";
-  public static final String REFS = "refs";
-  public static final String HEADS = "heads";
-  public static final String TAGS = "tags";
   private final File workDir;
   private final File repoDir;
   public Repository(File workDir) {
@@ -29,9 +25,9 @@ public class Repository {
   public void init() throws IOException {
     repoDir.mkdirs();
     new File(repoDir, "objects").mkdirs();
-    new File(repoDir, REFS).mkdirs();
-    new File(repoDir, REFS + File.separator + HEADS).mkdirs();
-    new File(repoDir, REFS + File.separator + TAGS).mkdirs();
+    new File(repoDir, "refs").mkdirs();
+    new File(repoDir, "refs" + File.separator + "heads").mkdirs();
+    new File(repoDir, "refs" + File.separator + "tags").mkdirs();
   }
   public File getRepoDir() {
     return repoDir;
