@@ -310,56 +310,83 @@ public class Repository {
     }
   }
 
-  
-  public void add(java.util.List<String> paths) throws java.io.IOException {
+  public void add(List<String> paths) throws IOException {
     june.lib.Add.add(this, paths);
   }
-  public String rm(java.util.List<String> paths, boolean cached) throws java.io.IOException {
-    return june.lib.Rm.rm(this, paths, cached);
-  }
-  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws java.io.IOException {
+
+  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws IOException {
     return june.lib.Commit.commit(this, msg, auto);
   }
-  public june.lib.Status.StatusResult status() throws java.io.IOException {
+
+  public june.lib.Status.StatusResult status() throws IOException {
     return june.lib.Status.status(this);
   }
-  public String checkout(String target) throws java.io.IOException {
-    return june.lib.Checkout.checkout(this, target);
-  }
-  public String restore(java.util.List<String> paths, boolean staged) throws java.io.IOException {
-    return june.lib.Restore.restore(this, paths, staged);
-  }
-  public String reset(String target) throws java.io.IOException {
-    return june.lib.Reset.reset(this, target);
-  }
-  public june.lib.Branch.BranchResult listBranches() throws java.io.IOException {
+
+  public june.lib.Branch.BranchResult listBranches() throws IOException {
     return june.lib.Branch.list(this);
   }
-  public String createBranch(String name) throws java.io.IOException {
+
+  public String createBranch(String name) throws IOException {
     return june.lib.Branch.create(this, name);
   }
-  public String deleteBranch(String name, boolean force) throws java.io.IOException {
+
+  public String deleteBranch(String name, boolean force) throws IOException {
     return june.lib.Branch.delete(this, name, force);
   }
-  public String renameBranch(String old, String newName) throws java.io.IOException {
+
+  public String renameBranch(String old, String newName) throws IOException {
     return june.lib.Branch.rename(this, old, newName);
   }
-  public java.util.List<String> listTags() {
+
+  public String checkout(String target) throws IOException {
+    return june.lib.Checkout.checkout(this, target);
+  }
+
+  public String restore(List<String> paths, boolean staged) throws IOException {
+    return june.lib.Restore.restore(this, paths, staged);
+  }
+
+  public String diff(boolean staged) throws IOException {
+    return june.lib.Diff.diff(this, staged);
+  }
+
+  public String rm(List<String> paths, boolean cached) throws IOException {
+    return june.lib.Rm.rm(this, paths, cached);
+  }
+
+  public String mv(String src, String dest) throws IOException {
+    return june.lib.Mv.mv(this, src, dest);
+  }
+
+  public List<String> listTags() {
     return june.lib.Tag.list(this);
   }
-  public String deleteTag(String name) throws java.io.IOException {
+
+  public String deleteTag(String name) throws IOException {
     return june.lib.Tag.delete(this, name);
   }
+
+  public String merge(String target) throws IOException {
+    return june.lib.Merge.merge(this, target);
+  }
+
+  public String reset(String target) throws IOException {
+    return june.lib.Reset.reset(this, target);
+  }
+
+  public List<june.lib.Log.LogEntry> log(int max) throws IOException {
+    return june.lib.Log.log(this, max);
+  }
+
+  public String catFile(String ref) throws IOException {
+    return june.lib.CatFile.catFile(this, ref);
+  }
+
   public String getConfig(String key) {
     return june.lib.Config.get(this, key);
   }
-  public void setConfig(String key, String value) throws java.io.IOException {
+
+  public void setConfig(String key, String value) throws IOException {
     june.lib.Config.set(this, key, value);
-  }
-  public String catFile(String ref) throws java.io.IOException {
-    return june.lib.CatFile.catFile(this, ref);
-  }
-  public java.util.List<june.lib.Log.LogEntry> log(int max) throws java.io.IOException {
-    return june.lib.Log.log(this, max);
   }
 }

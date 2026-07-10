@@ -14,7 +14,10 @@ June supports a standard subset of operations:
 - **Branches and Tags**: Create, list, and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
+- **Myers Diff**: Generate unified line-by-line diffs with contextual layout lines.
+- **Refactoring Sync**: Rename/move files or untrack them from the database.
 - **Log Traversal**: Print chronological commit histories in standard or single-line formats.
+- **Fast-forward Merges**: Merge branch histories without generating merge commits.
 - **Hard Resets**: Align the working directory and staging index directly with a target commit.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
@@ -154,6 +157,20 @@ java -cp bin App commit -a -m "Update configuration details"
 java -cp bin App commit -am "Update configuration details"
 ```
 
+### 6. `diff` — View Line Differences
+
+Compare lines between workspace files, the staging index, and HEAD:
+
+```bash
+# View unstaged changes in the working directory
+java -cp bin App diff
+
+# View staged changes in the index compared to HEAD
+java -cp bin App diff --staged
+# Or use the alias:
+java -cp bin App diff --cached
+```
+
 ### 7. `branch` — Manage Branches
 
 Manage branch references to track independent lines of development:
@@ -227,6 +244,14 @@ java -cp bin App rm src/Legacy.java
 java -cp bin App rm --cached src/Legacy.java
 ```
 
+### 12. `mv` — Move or Rename Files
+
+Rename a file or directory path, updating both the workspace and staging index:
+
+```bash
+java -cp bin App mv src/OldName.java src/NewName.java
+```
+
 ### 13. `cat-file` — Inspect Repository Objects
 
 Decompress and print raw database object details (blobs, trees, commits):
@@ -254,6 +279,15 @@ java -cp bin App log --max-count 5
 
 # Combine formatting and count limit
 java -cp bin App log --oneline -n 5
+```
+
+### 15. `merge` — Merge Branch History
+
+Integrate another branch, tag, or commit history into the currently checked-out branch using fast-forward merges only:
+
+```bash
+# Fast-forward the active branch pointer to feature-auth's commit
+java -cp bin App merge feature-auth
 ```
 
 ### 16. `reset` — Hard Reset Reference State
