@@ -1,7 +1,4 @@
-bin/
-jre/
+jre
 june
-cmd
+*.class
 .DS_Store
-**/.DS_Store
-*.jar

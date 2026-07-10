@@ -5,11 +5,11 @@ import june.Repository;
 public final class Mv {
   public static void run(Repository repo, String[] args) throws IOException {
     if (args.length < 2) {
-      throw new OperationException("Usage: mv <source> <destination>");
+      throw new OperationException("fatal: source and destination required");
     }
-    String res = repo.mv(args[0], args[1]);
-    if (res != null && !res.isEmpty()) {
-      System.out.println(res);
+    String result = repo.mv(args[0], args[1]);
+    if (!result.isEmpty()) {
+      System.out.println(result);
     }
   }
 }

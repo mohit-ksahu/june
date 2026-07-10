@@ -1,37 +1,39 @@
 import java.io.IOException;
-import java.io.File;
-import java.nio.file.Files;
+import java.util.List;
+import june.Helper;
+import june.OperationException;
 import june.Repository;
 
 public final class Tag {
   public static void run(Repository repo, String[] args) throws IOException {
-    if (args.length == 0) {
-      repo.listTags().forEach(System.out::println);
-    } else if (args[0].equals("-d")) {
-      String res = repo.deleteTag(args[1]);
-      if (res != null && !res.isEmpty()) {
-        System.out.println(res);
-      }
-    } else {
-      try {
-        String target = args.length > 1 ? args[1] : "HEAD";
-        String sha = resolveRef(repo, target);
-        repo.writeWithLock(repo.tagRefFile(args[0]), sha + "\n");
-        System.out.println("Created tag " + args[0] + " pointing to " + sha);
-      } catch (Exception e) {
-        throw new IOException(e);
-      }
+    String message = runTagCommand(repo, args);
+    if (!message.isEmpty()) {
+      System.out.println(message);
     }
   }
 
-  private static String resolveRef(Repository repo, String target) throws Exception {
-    if (target.equals("HEAD")) return repo.getHeadCommitSha1();
-    File branchFile = repo.branchRefFile(target);
-    if (branchFile.isFile()) return Files.readString(branchFile.toPath()).trim();
-    File tagFile = repo.tagRefFile(target);
-    if (tagFile.isFile()) return Files.readString(tagFile.toPath()).trim();
-    String sha = june.Helper.resolveShortSha1(repo.getRepoDir(), target);
-    if (sha != null) return sha;
-    return target;
+  private static String runTagCommand(Repository repo, String[] args) throws IOException {
+    if (args.length == 0) {
+      List<String> tags = repo.listTags();
+      return String.join("\n", tags);
+    }
+    if (args[0].equals("-d")) {
+      if (args.length < 2) {
+        throw new OperationException("fatal: tag name required");
+      }
+      String name = args[1];
+      String sha = repo.deleteTag(name);
+      return "Deleted tag '" + name + "' (was " + sha.substring(0, 7) + ")";
+    }
+    String name = args[0];
+    String target = args.length > 1 ? args[1] : "HEAD";
+    String sha = target.equals("HEAD")
+        ? repo.getHeadCommitSha1()
+        : Helper.resolveShortSha1(repo.getRepoDir(), target);
+    if (sha == null) {
+      throw new OperationException("fatal: Failed to resolve '" + target + "' as a valid ref.");
+    }
+    repo.createTag(name, sha);
+    return "";
   }
 }

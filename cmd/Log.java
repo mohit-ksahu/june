@@ -1,26 +1,58 @@
 import java.io.IOException;
+import java.util.List;
+import june.OperationException;
 import june.Repository;
+import june.lib.Log.LogEntry;
 
 public final class Log {
+
+  private static final String ANSI_RESET = "\u001B[0m";
+  private static final String ANSI_YELLOW = "\u001B[33m";
+
   public static void run(Repository repo, String[] args) throws IOException {
-    int max = Integer.MAX_VALUE;
     boolean oneline = false;
-    for (int i = 0; i < args.length; i++) {
-      if (args[i].equals("--oneline")) {
+    for (String arg : args) {
+      if (arg.equals("--oneline")) {
         oneline = true;
-      } else if (args[i].equals("-n") && i + 1 < args.length) {
-        max = Integer.parseInt(args[++i]);
       }
     }
-    var logResult = repo.log(max);
-    for (var entry : logResult) {
+    List<LogEntry> entries = repo.log(parseMaxCount(args));
+    if (entries.isEmpty()) {
+      System.out.println("No commits yet.");
+    } else {
+      formatLog(entries, oneline);
+    }
+  }
+
+  private static int parseMaxCount(String[] args) {
+    for (int i = 0; i < args.length; i++) {
+      if ((args[i].equals("-n") || args[i].equals("--max-count")) && i + 1 < args.length) {
+        try {
+          return Integer.parseInt(args[++i]);
+        } catch (NumberFormatException e) {
+          throw new OperationException("fatal: invalid argument for -n: " + args[i]);
+        }
+      }
+    }
+    return Integer.MAX_VALUE;
+  }
+
+  private static void formatLog(List<LogEntry> entries, boolean oneline) {
+    for (LogEntry entry : entries) {
       if (oneline) {
-        System.out.println(entry.sha1().substring(0, 7) + " " + entry.message());
+        System.out.println(ANSI_YELLOW + entry.sha1().substring(0, 7) + ANSI_RESET
+            + " " + entry.message().split("\n")[0]);
       } else {
-        System.out.println("commit " + entry.sha1());
+        System.out.println(ANSI_YELLOW + "commit " + entry.sha1() + ANSI_RESET);
         System.out.println("Author: " + entry.author());
-        System.out.println("Date:   " + entry.date());
-        System.out.println("\n    " + entry.message() + "\n");
+        if (!entry.date().isEmpty()) {
+          System.out.println("Date:   " + entry.date());
+        }
+        System.out.println();
+        for (String line : entry.message().split("\n")) {
+          System.out.println("    " + line);
+        }
+        System.out.println();
       }
     }
   }

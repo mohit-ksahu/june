@@ -296,12 +296,4 @@ public final class Helper {
     }
     return false;
   }
-
-  public static byte[] compress(byte[] data) throws java.io.IOException {
-    java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
-    try (java.util.zip.DeflaterOutputStream def = new java.util.zip.DeflaterOutputStream(buf)) {
-      def.write(data);
-    }
-    return buf.toByteArray();
-  }
 }
