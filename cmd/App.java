@@ -11,6 +11,7 @@ import june.Commit;
 import june.ObjectStore;
 import june.Index;
 import june.IgnoreRules;
+import june.XDiff;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -136,6 +137,17 @@ public class App {
         rules.addAll(java.nio.file.Files.readAllLines(ignoreFile.toPath()));
       }
       System.out.println("Path ignored: " + IgnoreRules.isIgnored(args[1], rules));
+      return;
+    }
+    if (cmd.equals("diff-lines")) {
+      if (args.length < 3) {
+        System.out.println("Usage: java App diff-lines <file1> <file2>");
+        System.exit(1);
+      }
+      List<String> lines1 = java.nio.file.Files.readAllLines(new File(args[1]).toPath());
+      List<String> lines2 = java.nio.file.Files.readAllLines(new File(args[2]).toPath());
+      var ops = XDiff.diffLines(lines1, lines2);
+      System.out.println("Shortest Edit Script transitions count: " + ops.size());
       return;
     }
     System.out.println("Unknown command: " + cmd);

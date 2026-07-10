@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, manages references, and compiles workspace ignore rules.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, manages references, compiles ignore rules, and calculates line diffs.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -289,6 +289,68 @@ static void acquireOrBreak(File lock) throws IOException {
 
 ## 5. System Algorithms and Logic
 
+### The Myers Diff Algorithm (`XDiff.java`)
+
+June compares text files using the Myers Diff algorithm. It takes two lists of text lines and finds the shortest path of changes between them.
+
+- The Myers algorithm finds the minimum number of additions and deletions needed to change one file into another.
+- It produces clean diffs with low memory usage by searching along diagonal paths.
+- The algorithm searches through different edit distances, finding the furthest path for each step and saving the history:
+
+```java
+for (d = 0; d <= max; d++) {
+  int[] vClone = v.clone();
+  for (int k = -d; k <= d; k += 2) {
+    boolean down = (k == -d || (k != d && vClone[max + k - 1] < vClone[max + k + 1]));
+    int kPrev = down ? k + 1 : k - 1;
+
+    int xStart = vClone[max + kPrev];
+    int x = down ? xStart : xStart + 1;
+    int y = x - k;
+
+    while (x < n && y < m && originalLines.get(x).equals(newLines.get(y))) {
+      x++;
+      y++;
+    }
+    v[max + k] = x;
+    if (x >= n && y >= m) {
+      found = true;
+      break;
+    }
+  }
+  history.add(v.clone());
+  if (found) break;
+}
+```
+- Once the path is found, June walks backward through the saved history to identify additions, deletions, and unchanged lines:
+
+```java
+for (int step = d; step >= 1; step--) {
+  int k = x - y;
+  int[] vPrev = history.get(step - 1);
+  boolean down = (k == -step || (k != step && vPrev[max + k - 1] < vPrev[max + k + 1]));
+  int kPrev = down ? k + 1 : k - 1;
+
+  int xPrev = vPrev[max + kPrev];
+  int xTrans = down ? xPrev : xPrev + 1;
+
+  while (x > xTrans) {
+    x--; y--;
+    ops.add(new DiffOp(' ', x + 1, y + 1, originalLines.get(x)));
+  }
+  if (down) {
+    y--;
+    ops.add(new DiffOp('+', -1, y + 1, newLines.get(y)));
+  } else {
+    x--;
+    ops.add(new DiffOp('-', x + 1, -1, originalLines.get(x)));
+  }
+  x = xPrev;
+  y = xPrev - kPrev;
+}
+```
+- These changes are grouped into hunks with 3 lines of unchanged text around them. If two changes are close to each other, they are merged into a single hunk.
+
 ### Glob Patterns and Ignore Rules (`IgnoreRules.java`)
 
 June reads `.juneignore` files to ignore specific files and directories (like build folders or temporary files).
@@ -329,7 +391,24 @@ private static String globToRegex(String glob) {
 
 This section explains how June handles specific situations and settings.
 
-### 1. Platform-Independent Link and Permission Mapping
+### 1. Binary File Identification
+
+- It is important to detect if a file contains binary data (like images or archives) rather than plain text.
+- Running text comparison algorithms on binary files is slow, uses too much memory, and prints unreadable text. Checking a small part of the file is fast and prevents this.
+- In `Helper.isBinary()`, June scans the first 8,000 bytes of the file. If it finds a NUL (`0`) byte, the file is treated as binary, and June prints `Binary files differ` instead of a line-by-line diff:
+
+```java
+public static boolean isBinary(byte[] data) {
+  for (int i = 0; i < Math.min(data.length, 8000); i++) {
+    if (data[i] == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+### 2. Platform-Independent Link and Permission Mapping
 
 - Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
 - Links and executable settings are important for scripts and builds, but operating systems handle them differently.
@@ -378,6 +457,11 @@ This section outlines how each class is built and how they work together.
 
 * **Role**: Parses pattern lists, compiles glob rules to regular expressions, searches workspaces recursively, and identifies local conflicts.
 * **Integrations**: Filters files during index staging operations and prevents active checkouts or merges from overwriting modified workspace files.
+
+### 6. Line Diff Algorithm (`XDiff.java` and `Modes.java`)
+
+* **Role**: Runs Myers diagonal searches, tracks edit history coordinates, and formats line differences into unified hunks.
+* **Integrations**: Computes changes between the staging index, HEAD commits, and physical workspace files for display by the diff operations.
 
 # June
 
