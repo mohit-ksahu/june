@@ -338,4 +338,10 @@ public class Repository {
   public String createBranch(String name) throws java.io.IOException {
     return june.lib.Branch.create(this, name);
   }
+  public String deleteBranch(String name, boolean force) throws java.io.IOException {
+    return june.lib.Branch.delete(this, name, force);
+  }
+  public String renameBranch(String old, String newName) throws java.io.IOException {
+    return june.lib.Branch.rename(this, old, newName);
+  }
 }

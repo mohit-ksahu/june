@@ -12,6 +12,11 @@ public final class Branch {
           System.out.println("  " + b);
         }
       }
+    } else if (args[0].equals("-d") || args[0].equals("-D")) {
+      String res = repo.deleteBranch(args[1], args[0].equals("-D"));
+      if (res != null && !res.isEmpty()) {
+        System.out.println(res);
+      }
     } else {
       String res = repo.createBranch(args[0]);
       if (res != null && !res.isEmpty()) {
