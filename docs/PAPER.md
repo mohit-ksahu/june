@@ -43,6 +43,7 @@ public static void main(String[] args) {
       case "add" -> Add.run(repo, rest);
       case "commit" -> Commit.run(repo, rest);
       case "status" -> Status.run(repo, rest);
+      case "checkout" -> Checkout.run(repo, rest);
       case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
       default -> {
@@ -547,13 +548,43 @@ public static boolean isBinary(byte[] data) {
 }
 ```
 
-### 3. Status Path Collapsing
+### 3. Short SHA-1 Lookup and Ambiguity Resolution
+
+- Finding a full 40-character hash from a short prefix (like `a94a8f`) makes June easier to use.
+- Typing the full hash is tedious, but a short prefix must be checked carefully to avoid matching more than one file.
+- In `Helper.resolveShortSha1()`, June requires the prefix to be at least 4 characters long. It searches the matching objects directory for files that start with the prefix. If no match is found, it returns `null`. If more than one file matches, it throws an error stating that the short hash is ambiguous.
+
+```java
+public static String resolveShortSha1(File repoDir, String shortSha1) {
+  if (shortSha1.length() == 40) {
+    return shortSha1;
+  }
+  if (shortSha1.length() < 4) {
+    throw new OperationException("error: short SHA-1 must be at least 4 characters");
+  }
+  File subDir = new File(new File(repoDir, "objects"), shortSha1.substring(0, 2));
+  if (!subDir.isDirectory()) {
+    return null;
+  }
+  String suffix = shortSha1.substring(2);
+  File[] matches = subDir.listFiles((d, n) -> n.startsWith(suffix));
+  if (matches == null || matches.length == 0) {
+    return null;
+  }
+  if (matches.length > 1) {
+    throw new OperationException("error: short SHA-1 " + shortSha1 + " is ambiguous");
+  }
+  return shortSha1.substring(0, 2) + matches[0].getName();
+}
+```
+
+### 4. Status Path Collapsing
 
 - Grouping untracked files in the same directory under a single folder name keeps the status output clean.
 - If you have an untracked directory containing many files, listing all of them would clutter the console.
 - In `june.lib.Status.status()`, if a folder is untracked and none of its files are tracked, June lists only the folder path (e.g., `dir/`) instead of listing every file inside it.
 
-### 4. Platform-Independent Link and Permission Mapping
+### 5. Platform-Independent Link and Permission Mapping
 
 - Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
 - Links and executable settings are important for scripts and builds, but operating systems handle them differently.
@@ -665,6 +696,9 @@ public class ProgrammaticExample {
         // 5. Commit staged changes (equivalent to `june commit`)
         CommitResult commit = repo.commit("feat: initial programmatic commit", false);
         System.out.println("Created Commit: " + commit.commitSha1());
+
+        // 6. Switch version context (equivalent to `june checkout`)
+        repo.checkout("main");
     }
 }
 ```
@@ -788,6 +822,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - Re-routing status lists into a helper printer checks list boundaries, ensuring empty sections are not printed.
 - Writing the ANSI reset code at the end of each print section prevents color bleeding into subsequent terminal outputs.
 
+### 6. `checkout`
+
+* **Syntax**: `june checkout <branch-name> | <commit-or-tag>`
+- Checkout updates the workspace to match a target branch, tag, or commit.
+- Switching versions requires validating targets, checking for conflicts, and updating files on disk.
+- In `june.cmd.Checkout`, June passes the target argument string to the checkout logic to resolve hashes and verify commit payloads.
+
 ### 7. `restore`
 
 * **Syntax**: `june restore [--staged] <file>...`
@@ -806,6 +847,7 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
+* **Checkout.java**: Verifies target arguments and calls checkout.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
 * **Restore.java**: Checks for `--staged` flags and path arrays.
@@ -822,5 +864,6 @@ In addition to command-line execution, the library exposes all features via dire
 | **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
 | **Record Commit** | `repo.commit(String message, boolean autoStage)` | `Commit.java` |
 | **Check Status** | `repo.status()` | `Status.java` |
+| **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
