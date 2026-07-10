@@ -63,12 +63,56 @@ public class Index {
   }
 
   public void write() throws IOException {
-    StringBuilder sb = new StringBuilder();
-    for (Entry e : entries.values()) {
-      sb.append(e.sha1()).append(FIELD_SEP)
-        .append(e.mode()).append(FIELD_SEP)
-        .append(e.path()).append(LINE_SEP);
+    File lock = new File(indexFile.getParentFile(), "index.lock");
+    FileLock.acquireOrBreak(lock);
+    try {
+      StringBuilder sb = new StringBuilder();
+      for (Entry e : entries.values()) {
+        sb.append(e.sha1()).append(FIELD_SEP)
+          .append(e.mode()).append(FIELD_SEP)
+          .append(e.path()).append(LINE_SEP);
+      }
+      Files.writeString(lock.toPath(), sb.toString(), StandardCharsets.UTF_8);
+      Files.move(lock.toPath(), indexFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
+    } catch (IOException e) {
+      lock.delete();
+      throw e;
     }
-    Files.writeString(indexFile.toPath(), sb.toString(), StandardCharsets.UTF_8);
+  }
+}
+
+final class FileLock {
+
+  private static final long STALE_LOCK_MILLIS =
+      Long.getLong("june.lock.staleMillis", 5L * 60 * 1000);
+
+  private FileLock() {}
+
+  static void acquireOrBreak(File lock) throws IOException {
+    File parent = lock.getParentFile();
+    if (parent != null) {
+      parent.mkdirs();
+    }
+    if (lock.createNewFile()) {
+      return;
+    }
+    if (isStale(lock)) {
+      lock.delete();
+      if (lock.createNewFile()) {
+        return;
+      }
+    }
+    throw new OperationException(
+        "Unable to create " + lock.getName() + ": another june process is running.");
+  }
+
+  private static boolean isStale(File lock) {
+    try {
+      java.nio.file.attribute.BasicFileAttributes attrs =
+          Files.readAttributes(lock.toPath(), java.nio.file.attribute.BasicFileAttributes.class);
+      return System.currentTimeMillis() - attrs.lastModifiedTime().toMillis() > STALE_LOCK_MILLIS;
+    } catch (IOException e) {
+      return false;
+    }
   }
 }

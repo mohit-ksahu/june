@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, manages references, and compiles workspace ignore rules.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -47,13 +47,48 @@ By default, June looks for or creates this directory in the current directory. I
 ```
 [workspace_root]/
 ├── .june/
+│   ├── HEAD
 │   ├── index
 │   ├── refs/
 │   │   ├── heads/
+│   │   │   └── main
 │   │   └── tags/
 │   └── objects/
 │       ├── [2-char hex]/
 │       │   └── [38-char hex]
+```
+
+### Branches, Tags, and the HEAD Pointer
+
+References are text files that hold a commit hash. They are saved as plain text containing a 40-character SHA-1 string.
+- The `HEAD` pointer tells June which branch or commit is currently checked out.
+- Pointing to a branch uses a path (like `ref: refs/heads/main`), while checking out a specific commit or tag writes the commit hash directly.
+- Pointing `HEAD` to a branch file means June does not have to change the `HEAD` file directly every time a commit is made; instead, it just updates the branch file.
+- If `HEAD` starts with `ref: `, June follows the path to read the underlying branch file; otherwise, it returns the commit hash directly.
+
+```java
+public String getHeadTarget() throws IOException {
+  return headFile.exists() ? Files.readString(headFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+}
+
+public String getHeadCommitSha1() throws IOException {
+  String head = getHeadTarget();
+  if (head == null) return null;
+  if (head.startsWith("ref: ")) {
+    File refFile = headRefFile(head);
+    return refFile.exists() ? Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+  }
+  return head;
+}
+
+public void updateHeadRefOrCommit(String sha) throws IOException {
+  String head = getHeadTarget();
+  if (head != null && head.startsWith("ref: ")) {
+    writeWithLock(headRefFile(head), sha + "\n");
+  } else {
+    setHeadTarget(sha);
+  }
+}
 ```
 
 ### Staging Index Layout
@@ -221,7 +256,88 @@ private static List<Entry> parseEntries(byte[] data) {
   return list;
 }
 ```
-## 4. Dependencies & Build Requirements
+
+## 4. Transaction Safety and File Locking
+
+June locks files to stop multiple commands from modifying the same file at the same time and corrupting it.
+
+- If more than one command modifies the index or a branch pointer at the same time, the files can become corrupt.
+- To prevent this, June writes changes to a temporary file ending in `.lock`. Once writing is finished, it renames the lock file to replace the original. This ensures the file is never left half-written.
+- Creating the lock file is atomic, which prevents two processes from grabbing the lock at the same time.
+- Before writing to files like the index or branch references, June tries to create a lock file (like `index.lock` or `main.lock`).
+- If the lock file already exists, June checks how old it is. If it is older than 5 minutes, June deletes the stale lock and tries to create a new one.
+
+```java
+static void acquireOrBreak(File lock) throws IOException {
+  File parent = lock.getParentFile();
+  if (parent != null) {
+    parent.mkdirs();
+  }
+  if (lock.createNewFile()) {
+    return;
+  }
+  if (isStale(lock)) {
+    lock.delete();
+    if (lock.createNewFile()) {
+      return;
+    }
+  }
+  throw new OperationException(
+      "Unable to create " + lock.getName() + ": another june process is running.");
+}
+```
+
+## 5. System Algorithms and Logic
+
+### Glob Patterns and Ignore Rules (`IgnoreRules.java`)
+
+June reads `.juneignore` files to ignore specific files and directories (like build folders or temporary files).
+
+- Java's standard string matching uses regular expressions.
+- Converting glob patterns (like `*.log`) into regular expressions allows June to reuse Java's fast built-in matcher instead of writing a custom parser.
+- June translates glob wildcards to Java regular expressions:
+  * Double asterisks `**` match directories recursively (`.*`).
+  * Single asterisks `*` match characters only within a single directory segment (`[^/]*`).
+  * Question marks `?` match any single character except a path separator (`[^/]`).
+
+```java
+private static String globToRegex(String glob) {
+  StringBuilder sb = new StringBuilder("^");
+  for (int i = 0; i < glob.length(); i++) {
+    char c = glob.charAt(i);
+    if (c == '*') {
+      if (i + 1 < glob.length() && glob.charAt(i + 1) == '*') {
+        sb.append(".*");
+        i++;
+      } else {
+        sb.append("[^/]*");
+      }
+    } else if (c == '?') {
+      sb.append("[^/]");
+    } else if ("\\.[]{}()+-^$|".indexOf(c) != -1) {
+      sb.append("\\").append(c);
+    } else {
+      sb.append(c);
+    }
+  }
+  return sb.append("$").toString();
+}
+```
+- Pattern rules starting with `!` include files instead of ignoring them. Patterns anchored at the root directory must match from the top level, while other patterns match any segment of the file path.
+
+## 6. System Operations and Low-Level Behaviors
+
+This section explains how June handles specific situations and settings.
+
+### 1. Platform-Independent Link and Permission Mapping
+
+- Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
+- Links and executable settings are important for scripts and builds, but operating systems handle them differently.
+- June uses standard Java features in `Helper.java`. `Helper.entryMode()` checks if a file is a symbolic link to apply the `120000` mode, and checks if it is executable to apply the `100755` mode.
+- The destination of a symbolic link is read as a string and saved as the file content.
+- During checkout, if a file mode is `120000`, June recreates the symbolic link. If the mode is `100755`, it writes the file and marks it as executable.
+
+## 7. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
 
@@ -234,7 +350,7 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.util.zip`: Handles file compression.
 * `java.time`: Handles date and time for commits.
 
-## 5. System Implementation Sequence and Class Dependency Reference
+## 8. System Implementation Sequence and Class Dependency Reference
 
 This section outlines how each class is built and how they work together.
 
@@ -248,15 +364,20 @@ This section outlines how each class is built and how they work together.
 * **Role**: Implements zlib-compressed persistence, file reads/writes, and streaming access to the repository object database.
 * **Integrations**: Writes serialized object bytes to partitioned subdirectories based on computed SHA-1 hashes, and decompresses payload inputs up to a 10MB memory ceiling.
 
-### 3. Staging State (implemented in `Index.java`)
+### 3. File Lock & Staging State (implemented in `Index.java`)
 
-* **Role**: Parses the plain-text NUL-separated staging database.
+* **Role**: Protects metadata records from concurrent write corruption using atomic lock verification (via an internal package-private `FileLock` class) and parses the plain-text NUL-separated staging database.
 * **Integrations**: Manages staging operations for adding and removing workspace paths, sorting entries alphabetically via an internal tree map structure.
 
 ### 4. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
-* **Role**: Resolves local repository paths.
+* **Role**: Resolves local repository paths, updates active HEAD pointer states (symbolic and detached), and manages local properties config storage.
 * **Integrations**: Orchestrates interactions between the staging index, object storage, and ref sub-systems during checkouts and commits.
+
+### 5. Ignore Rules and Path Traversal (`IgnoreRules.java` and `Helper.java`)
+
+* **Role**: Parses pattern lists, compiles glob rules to regular expressions, searches workspaces recursively, and identifies local conflicts.
+* **Integrations**: Filters files during index staging operations and prevents active checkouts or merges from overwriting modified workspace files.
 
 # June
 
@@ -273,5 +394,6 @@ The main entry point is the `App` class in the `cmd` directory. When you run a c
 ### 1. `init`
 
 * **Syntax**: `june init`
-- You must initialize the repository before running other commands.
-- In `init`, June calls `repo.init()` to create `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/`.
+- Setting up a repository directory structure is necessary before running any other version control operations.
+- Creating the database directories initializes a fresh tracking scope. If the HEAD reference file is missing, June writes a default pointer targeting the main branch.
+- In `init`, June invokes `repo.init()` which generates `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/` directories.

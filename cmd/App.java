@@ -10,6 +10,7 @@ import june.Modes;
 import june.Commit;
 import june.ObjectStore;
 import june.Index;
+import june.IgnoreRules;
 
 public class App {
   public static void main(String[] args) throws Exception {
@@ -108,6 +109,33 @@ public class App {
       index.write();
       System.out.println("Added and wrote staging entry: " + args[3]);
       tempIndex.delete();
+      return;
+    }
+    if (cmd.equals("update-ref")) {
+      if (args.length < 3) {
+        System.out.println("Usage: java App update-ref <refName> <sha1>");
+        System.exit(1);
+      }
+      File repoTarget = new File(".");
+      Repository repo = new Repository(repoTarget);
+      repo.setHeadTarget("ref: " + args[1]);
+      repo.updateHeadRefOrCommit(args[2]);
+      System.out.println("Updated reference " + args[1] + " to commit " + args[2]);
+      return;
+    }
+    if (cmd.equals("check-ignore")) {
+      if (args.length < 2) {
+        System.out.println("Usage: java App check-ignore <path>");
+        System.exit(1);
+      }
+      File repoTarget = new File(".");
+      Repository repo = new Repository(repoTarget);
+      List<String> rules = new ArrayList<>();
+      File ignoreFile = new File(repoTarget, ".juneignore");
+      if (ignoreFile.exists()) {
+        rules.addAll(java.nio.file.Files.readAllLines(ignoreFile.toPath()));
+      }
+      System.out.println("Path ignored: " + IgnoreRules.isIgnored(args[1], rules));
       return;
     }
     System.out.println("Unknown command: " + cmd);
