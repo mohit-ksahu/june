@@ -22,6 +22,7 @@ public class App {
       }
       switch (command) {
         case "add" -> Add.run(repo, rest);
+        case "rm" -> Rm.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

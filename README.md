@@ -1,4 +1,5 @@
 # June
+
 June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
 
 The implementation separates the command-line adapter layer from reusable repository and feature logic, making the codebase clean, modular, and easy to extend.
@@ -106,4 +107,16 @@ java -cp bin App add README.md build.gradle
 
 # Stage directory paths recursively
 java -cp bin App add docs/
+```
+
+### 11. `rm` — Remove Files from Tracking
+
+Stop tracking files and optionally remove them from the physical workspace:
+
+```bash
+# Remove tracking and delete the file from the disk
+java -cp bin App rm src/Legacy.java
+
+# Remove tracking but keep the physical file in the working directory
+java -cp bin App rm --cached src/Legacy.java
 ```

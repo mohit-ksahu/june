@@ -314,4 +314,7 @@ public class Repository {
   public void add(java.util.List<String> paths) throws java.io.IOException {
     june.lib.Add.add(this, paths);
   }
+  public String rm(java.util.List<String> paths, boolean cached) throws java.io.IOException {
+    return june.lib.Rm.rm(this, paths, cached);
+  }
 }

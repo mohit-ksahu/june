@@ -41,6 +41,7 @@ public static void main(String[] args) {
     }
     switch (command) {
       case "add" -> Add.run(repo, rest);
+      case "rm" -> Rm.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -575,11 +576,19 @@ public static void run(Repository repo, String[] args) throws IOException {
 - Validating the arguments length before invoking the staging workflow prevents empty stages from running.
 - Passing the arguments as a standard Java list ensures compatibility with collection walking methods.
 
+### 9. `rm`
+
+* **Syntax**: `june rm [--cached] <file>...`
+- Removing files untracks them from the index and optionally deletes them from the disk.
+- The command validates that target paths are currently tracked before executing deletions.
+- In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
 * **Init.java**: Calls the repository initialization method directly.
+* **Rm.java**: Extracts path specifications and `--cached` flags.
 
 ## 4. Programmatic API Mapping
 
@@ -589,3 +598,4 @@ In addition to command-line execution, the library exposes all features via dire
 | :--- | :--- | :--- |
 | **Initialize** | `repo.init()` | `Init.java` |
 | **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
+| **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
