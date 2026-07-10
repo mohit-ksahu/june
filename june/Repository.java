@@ -317,4 +317,7 @@ public class Repository {
   public String rm(java.util.List<String> paths, boolean cached) throws java.io.IOException {
     return june.lib.Rm.rm(this, paths, cached);
   }
+  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws java.io.IOException {
+    return june.lib.Commit.commit(this, msg, auto);
+  }
 }

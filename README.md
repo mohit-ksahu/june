@@ -9,6 +9,7 @@ The implementation separates the command-line adapter layer from reusable reposi
 June supports a standard subset of operations:
 - **Repository Setup**: Initialize database directories (`.june/`) and configure default refs.
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
+- **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
@@ -107,6 +108,20 @@ java -cp bin App add README.md build.gradle
 
 # Stage directory paths recursively
 java -cp bin App add docs/
+```
+
+### 5. `commit` — Record a Commit Snapshot
+
+Save staged index modifications to the repository log history:
+
+```bash
+# Commit standard changes with a message
+java -cp bin App commit -m "Create initial project structure"
+
+# Automatically stage modified tracked files and commit
+java -cp bin App commit -a -m "Update configuration details"
+# Or combine the flags:
+java -cp bin App commit -am "Update configuration details"
 ```
 
 ### 11. `rm` — Remove Files from Tracking

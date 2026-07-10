@@ -41,6 +41,7 @@ public static void main(String[] args) {
     }
     switch (command) {
       case "add" -> Add.run(repo, rest);
+      case "commit" -> Commit.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
@@ -412,7 +413,17 @@ private static String globToRegex(String glob) {
 
 This section explains how June handles specific situations and settings.
 
-### 1. Binary File Identification
+### 1. User Identity Resolution
+
+- June uses a series of fallbacks to find the username and email for commits.
+- This ensures every commit has a valid author name and email, even if they are not configured.
+- When creating a commit, June resolves the name and email by checking:
+  1. The local config file (`user.name` and `user.email`).
+  2. The system environment variable `USER`.
+  3. The Java system property `user.name` (defaults to `"June User"` if not set).
+  4. For the fallback email, June converts the name to lowercase, removes spaces, and adds `@localhost`.
+
+### 2. Binary File Identification
 
 - It is important to detect if a file contains binary data (like images or archives) rather than plain text.
 - Running text comparison algorithms on binary files is slow, uses too much memory, and prints unreadable text. Checking a small part of the file is fast and prevents this.
@@ -429,7 +440,7 @@ public static boolean isBinary(byte[] data) {
 }
 ```
 
-### 2. Platform-Independent Link and Permission Mapping
+### 3. Platform-Independent Link and Permission Mapping
 
 - Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
 - Links and executable settings are important for scripts and builds, but operating systems handle them differently.
@@ -510,6 +521,8 @@ Below is a Java example showing how to initialize a repository, stage files, che
 
 ```java
 import june.Repository;
+import june.lib.Commit.CommitResult;
+import june.lib.Status.StatusResult;
 import java.io.File;
 import java.util.List;
 
@@ -528,6 +541,17 @@ public class ProgrammaticExample {
         // 3. Stage changes (equivalent to `june add`)
         repo.add(List.of("src/Main.java", "README.md"));
         System.out.println("Files staged successfully.");
+
+        // 4. Query current staging status (equivalent to `june status`)
+        StatusResult status = repo.status();
+        System.out.println("Active Branch: " + status.branch());
+        System.out.println("Staged files: " + status.staged());
+        System.out.println("Unstaged files: " + status.unstaged());
+        System.out.println("Untracked files: " + status.untracked());
+
+        // 5. Commit staged changes (equivalent to `june commit`)
+        CommitResult commit = repo.commit("feat: initial programmatic commit", false);
+        System.out.println("Created Commit: " + commit.commitSha1());
     }
 }
 ```
@@ -576,6 +600,44 @@ public static void run(Repository repo, String[] args) throws IOException {
 - Validating the arguments length before invoking the staging workflow prevents empty stages from running.
 - Passing the arguments as a standard Java list ensures compatibility with collection walking methods.
 
+### 3. `commit`
+
+* **Syntax**: `june commit [-a] -m <message>` or `june commit -am <message>`
+- Recording modifications in a commit permanently saves the staged state to the commit log.
+- Commits require a non-blank message parameter and optional auto-staging flags to automatically include modified tracked files.
+- In `june.cmd.Commit`, June iterates through argument inputs, toggling auto-stage state variables when encountering `-a` or `-am` flags, and extracting the trailing message parameter when encountering `-m` or `-am`.
+
+```java
+public static void run(Repository repo, String[] args) throws IOException {
+  String msg = null;
+  boolean auto = false;
+  for (int i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "-a" -> auto = true;
+      case "-m", "-am" -> {
+        if (args[i].equals("-am")) {
+          auto = true;
+        }
+        if (i + 1 < args.length) {
+          msg = args[++i];
+        }
+      }
+      default -> {}
+    }
+  }
+  if (msg == null) {
+    throw new OperationException("fatal: no commit message specified (use -m \"message\")");
+  }
+  String result = repo.commit(msg, auto).message();
+  if (!result.isEmpty()) {
+    System.out.println(result);
+  }
+}
+```
+- Parsing the arguments with a switch loop allows options like `-a` and `-m` to be specified in any order.
+- Splicing the next argument index immediately when `-m` or `-am` is detected safely captures multi-word commit messages enclosed in quotes.
+- The command throws a clean operation exception if no message is found, preventing the creation of empty-labeled commits.
+
 ### 9. `rm`
 
 * **Syntax**: `june rm [--cached] <file>...`
@@ -587,6 +649,7 @@ public static void run(Repository repo, String[] args) throws IOException {
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
+* **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
 
@@ -598,4 +661,5 @@ In addition to command-line execution, the library exposes all features via dire
 | :--- | :--- | :--- |
 | **Initialize** | `repo.init()` | `Init.java` |
 | **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
+| **Record Commit** | `repo.commit(String message, boolean autoStage)` | `Commit.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
