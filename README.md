@@ -14,6 +14,10 @@ June supports a standard subset of operations:
 - **Branches and Tags**: Create, list, and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
+- **Myers Diff**: Generate unified line-by-line diffs with contextual layout lines.
+- **Refactoring Sync**: Rename/move files or untrack them from the database.
+- **Log Traversal**: Print chronological commit histories in standard or single-line formats.
+- **Fast-forward Merges**: Merge branch histories without generating merge commits.
 - **Hard Resets**: Align the working directory and staging index directly with a target commit.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
@@ -100,6 +104,21 @@ java -cp bin App init
 ```
 
 
+### 2. `config` — Manage Configuration Settings
+
+Read or write repository configuration parameters stored in `.june/config`:
+
+```bash
+# Set user name
+java -cp bin App config user.name "John Doe"
+
+# Set user email
+java -cp bin App config user.email "john@example.com"
+
+# Read a configuration value
+java -cp bin App config user.name
+```
+
 ### 3. `add` — Stage File Changes
 
 Stage files and directories to prepare them for the next commit:
@@ -138,6 +157,20 @@ java -cp bin App commit -a -m "Update configuration details"
 java -cp bin App commit -am "Update configuration details"
 ```
 
+### 6. `diff` — View Line Differences
+
+Compare lines between workspace files, the staging index, and HEAD:
+
+```bash
+# View unstaged changes in the working directory
+java -cp bin App diff
+
+# View staged changes in the index compared to HEAD
+java -cp bin App diff --staged
+# Or use the alias:
+java -cp bin App diff --cached
+```
+
 ### 7. `branch` — Manage Branches
 
 Manage branch references to track independent lines of development:
@@ -154,6 +187,24 @@ java -cp bin App branch -d feature-auth
 
 # Force delete a branch
 java -cp bin App branch -D feature-auth
+```
+
+### 8. `tag` — Manage Tags
+
+Create, list, or delete reference tags:
+
+```bash
+# List all tags in the repository
+java -cp bin App tag
+
+# Create a tag pointing to the current commit
+java -cp bin App tag v1.0.0
+
+# Create a tag pointing to a specific commit hash or resolved ref
+java -cp bin App tag v1.0.0 a94a8f
+
+# Delete a tag
+java -cp bin App tag -d v1.0.0
 ```
 
 ### 9. `checkout` — Switch Active States
@@ -191,6 +242,52 @@ java -cp bin App rm src/Legacy.java
 
 # Remove tracking but keep the physical file in the working directory
 java -cp bin App rm --cached src/Legacy.java
+```
+
+### 12. `mv` — Move or Rename Files
+
+Rename a file or directory path, updating both the workspace and staging index:
+
+```bash
+java -cp bin App mv src/OldName.java src/NewName.java
+```
+
+### 13. `cat-file` — Inspect Repository Objects
+
+Decompress and print raw database object details (blobs, trees, commits):
+
+```bash
+# Pretty-print the resolved contents of an object hash
+java -cp bin App cat-file -p a94a8f
+```
+
+### 14. `log` — View Commit History
+
+Display the commit logs in reverse chronological order:
+
+```bash
+# Print standard commit log history
+java -cp bin App log
+
+# Print condensed single-line log history
+java -cp bin App log --oneline
+
+# Limit the log to a specific count of commits
+java -cp bin App log -n 5
+# Or use the alias:
+java -cp bin App log --max-count 5
+
+# Combine formatting and count limit
+java -cp bin App log --oneline -n 5
+```
+
+### 15. `merge` — Merge Branch History
+
+Integrate another branch, tag, or commit history into the currently checked-out branch using fast-forward merges only:
+
+```bash
+# Fast-forward the active branch pointer to feature-auth's commit
+java -cp bin App merge feature-auth
 ```
 
 ### 16. `reset` — Hard Reset Reference State

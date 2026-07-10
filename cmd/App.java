@@ -29,6 +29,13 @@ public class App {
         case "restore" -> Restore.run(repo, rest);
         case "reset" -> Reset.run(repo, rest);
         case "branch" -> Branch.run(repo, rest);
+        case "tag" -> Tag.run(repo, rest);
+        case "config" -> Config.run(repo, rest);
+        case "cat-file" -> CatFile.run(repo, rest);
+        case "merge" -> Merge.run(repo, rest);
+        case "mv" -> Mv.run(repo, rest);
+        case "diff" -> Diff.run(repo, rest);
+        case "log" -> Log.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

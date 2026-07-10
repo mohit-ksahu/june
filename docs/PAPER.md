@@ -46,8 +46,15 @@ public static void main(String[] args) {
       case "branch" -> Branch.run(repo, rest);
       case "checkout" -> Checkout.run(repo, rest);
       case "restore" -> Restore.run(repo, rest);
+      case "diff" -> Diff.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
+      case "mv" -> Mv.run(repo, rest);
+      case "tag" -> Tag.run(repo, rest);
+      case "merge" -> Merge.run(repo, rest);
+      case "config" -> Config.run(repo, rest);
       case "reset" -> Reset.run(repo, rest);
+      case "cat-file" -> CatFile.run(repo, rest);
+      case "log" -> Log.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -75,6 +82,7 @@ By default, June looks for or creates this directory in the current directory. I
 [workspace_root]/
 ├── .june/
 │   ├── HEAD
+│   ├── config
 │   ├── index
 │   ├── refs/
 │   │   ├── heads/
@@ -137,6 +145,30 @@ public Index(File indexFile) throws IOException {
       }
     }
   }
+}
+```
+
+### Configuration Management
+
+- Local settings are saved in `.june/config` so users can set a username and email for the repository.
+- June uses the standard Java properties format, which avoids writing custom parsing code or using external libraries.
+- In `Config.java`, June loads settings from `.june/config` and returns the value for the requested key. If the repository does not exist or the key is missing, it returns `null`.
+
+```java
+public static String get(Repository repo, String key) {
+  if (!repo.exists()) {
+    return null;
+  }
+  java.util.Properties props = new java.util.Properties();
+  File configFile = new File(repo.getRepoDir(), "config");
+  if (configFile.exists()) {
+    try (java.io.Reader reader = Files.newBufferedReader(configFile.toPath(), StandardCharsets.UTF_8)) {
+      props.load(reader);
+    } catch (IOException e) {
+      throw new OperationException("fatal: could not read config: " + e.getMessage());
+    }
+  }
+  return props.getProperty(key);
 }
 ```
 
@@ -845,12 +877,40 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command routes paths and staging flags to the restoration utilities, expanding directories as needed.
 - In `june.cmd.Restore`, June parses the `--staged` option to choose between index modifications or workspace content resets.
 
+### 8. `diff`
+
+* **Syntax**: `june diff [--cached | --staged]`
+- Diff shows line-by-line differences between the workspace, index, and commit history.
+- Users can view changes staged in the index or modifications still in the working directory.
+- In `june.cmd.Diff`, June checks for `--cached` or `--staged` flags to select the comparison target.
+
 ### 9. `rm`
 
 * **Syntax**: `june rm [--cached] <file>...`
 - Removing files untracks them from the index and optionally deletes them from the disk.
 - The command validates that target paths are currently tracked before executing deletions.
 - In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
+
+### 10. `mv`
+
+* **Syntax**: `june mv <source> <destination>`
+- Moving a file renames it in the workspace and updates its path key in the staging index.
+- June verifies that the source path is tracked and the destination path is free.
+- In `june.cmd.Mv`, June passes the parameters to move files and update the index entries.
+
+### 11. `cat-file`
+
+* **Syntax**: `june cat-file -p <object-sha1>`
+- Inspecting database objects displays decompressed payload details for debugging.
+- The command restricts access using the `-p` parameter for pretty-printing.
+- In `june.cmd.CatFile`, June verifies the pretty-print flag and outputs the resolved object contents.
+
+### 12. `config`
+
+* **Syntax**: `june config <key> [<value>]`
+- Configuring options sets local values for key variables like username and email.
+- The command splits reads (with one argument) from writes (with two arguments).
+- In `june.cmd.Config`, June checks the argument length to select read or write actions.
 
 ### 13. `reset`
 
@@ -859,18 +919,46 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command requires a `--hard` flag to confirm that local modifications will be overwritten.
 - In `june.cmd.Reset`, June validates the hard reset flag and resolves the target commit hash.
 
+### 14. `tag`
+
+* **Syntax**: `june tag [-d] [<tag-name>] [<commit-sha1>]`
+- Tags represent permanent named references to specific commits.
+- The command lists existing tags, deletes reference files, or creates new tags pointing at HEAD or a resolved commit.
+- In `june.cmd.Tag`, June checks for tag deletion flags or name parameters to update tag references.
+
+### 15. `merge`
+
+* **Syntax**: `june merge <branch-or-tag-or-commit>`
+- Merging integrates history from a branch, tag, or commit into the current HEAD.
+- June supports fast-forward merges only; it will update the active branch pointer when the target is a descendant of the current commit.
+- In `june.cmd.Merge`, June resolves the target against branch refs, tag refs, and short commit hashes, then validates the fast-forward condition.
+
+### 16. `log`
+
+* **Syntax**: `june log [--oneline] [-n <count>] [--max-count <count>]`
+- The commit log displays the history of commits in reverse chronological order.
+- Logging traverses parent hashes from HEAD and supports compact formatting and count limits.
+- In `june.cmd.Log`, June parses options like `--oneline`, `-n`, and `--max-count` to format and filter the output list.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
 * **Branch.java**: Detects listing vs deletion vs creation flags.
+* **CatFile.java**: Enforces `-p` parameters and prints outputs.
 * **Checkout.java**: Verifies target arguments and calls checkout.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
+* **Config.java**: Routes reading vs writing calls to config utilities.
+* **Diff.java**: Checks for `--cached` / `--staged` flags.
 * **Init.java**: Calls the repository initialization method directly.
+* **Log.java**: Checks for `--oneline` and `-n` limits.
+* **Merge.java**: Resolves target branch names to trigger fast-forward checks.
+* **Mv.java**: Verifies source and destination parameters.
 * **Reset.java**: Validates `--hard` flags and commit targets.
 * **Restore.java**: Checks for `--staged` flags and path arrays.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
 * **Status.java**: Prints the results of the repository status call.
+* **Tag.java**: Parses tag listing, tag creation, or tag deletion flags.
 
 ## 4. Programmatic API Mapping
 
@@ -884,6 +972,13 @@ In addition to command-line execution, the library exposes all features via dire
 | **Check Status** | `repo.status()` | `Status.java` |
 | **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
+| **Generate Diff** | `repo.diff(boolean staged)` | `Diff.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
+| **Rename Files** | `repo.mv(String src, String dest)` | `Mv.java` |
+| **Log History** | `repo.log(int maxCount)` | `Log.java` |
+| **Inspect Objects** | `repo.catFile(String ref)` | `CatFile.java` |
+| **Manage Config** | `repo.getConfig(key)` / `repo.setConfig(key, val)` | `Config.java` |
 | **Reset State** | `repo.reset(String target)` | `Reset.java` |
+| **Merge Ancestry** | `repo.merge(String target)` | `Merge.java` |
 | **Branch Operations**| `repo.createBranch(name)` / `repo.listBranches()` / `repo.deleteBranch(name, force)` | `Branch.java` |
+| **Tag Operations** | `repo.createTag(name, sha)` / `repo.listTags()` / `repo.deleteTag(name)` | `Tag.java` |
