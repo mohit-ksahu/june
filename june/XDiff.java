@@ -112,9 +112,14 @@ public class XDiff {
     Collections.reverse(ops);
 
     List<String> output = new ArrayList<>();
+    int additions = 0;
+    int deletions = 0;
     for (DiffOp op : ops) {
       output.add(op.type + op.text);
+      if (op.type == '+') additions++;
+      if (op.type == '-') deletions++;
     }
+    output.add("Summary: " + additions + " additions, " + deletions + " deletions");
     return output;
   }
 }
