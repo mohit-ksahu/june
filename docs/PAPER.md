@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, and locks files to prevent concurrent write conflicts.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -221,7 +221,38 @@ private static List<Entry> parseEntries(byte[] data) {
   return list;
 }
 ```
-## 4. Dependencies & Build Requirements
+
+## 4. Transaction Safety and File Locking
+
+June locks files to stop multiple commands from modifying the same file at the same time and corrupting it.
+
+- If more than one command modifies the index or a branch pointer at the same time, the files can become corrupt.
+- To prevent this, June writes changes to a temporary file ending in `.lock`. Once writing is finished, it renames the lock file to replace the original. This ensures the file is never left half-written.
+- Creating the lock file is atomic, which prevents two processes from grabbing the lock at the same time.
+- Before writing to files like the index or branch references, June tries to create a lock file (like `index.lock` or `main.lock`).
+- If the lock file already exists, June checks how old it is. If it is older than 5 minutes, June deletes the stale lock and tries to create a new one.
+
+```java
+static void acquireOrBreak(File lock) throws IOException {
+  File parent = lock.getParentFile();
+  if (parent != null) {
+    parent.mkdirs();
+  }
+  if (lock.createNewFile()) {
+    return;
+  }
+  if (isStale(lock)) {
+    lock.delete();
+    if (lock.createNewFile()) {
+      return;
+    }
+  }
+  throw new OperationException(
+      "Unable to create " + lock.getName() + ": another june process is running.");
+}
+```
+
+## 5. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
 
@@ -234,7 +265,7 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.util.zip`: Handles file compression.
 * `java.time`: Handles date and time for commits.
 
-## 5. System Implementation Sequence and Class Dependency Reference
+## 6. System Implementation Sequence and Class Dependency Reference
 
 This section outlines how each class is built and how they work together.
 
@@ -248,9 +279,9 @@ This section outlines how each class is built and how they work together.
 * **Role**: Implements zlib-compressed persistence, file reads/writes, and streaming access to the repository object database.
 * **Integrations**: Writes serialized object bytes to partitioned subdirectories based on computed SHA-1 hashes, and decompresses payload inputs up to a 10MB memory ceiling.
 
-### 3. Staging State (implemented in `Index.java`)
+### 3. File Lock & Staging State (implemented in `Index.java`)
 
-* **Role**: Parses the plain-text NUL-separated staging database.
+* **Role**: Protects metadata records from concurrent write corruption using atomic lock verification (via an internal package-private `FileLock` class) and parses the plain-text NUL-separated staging database.
 * **Integrations**: Manages staging operations for adding and removing workspace paths, sorting entries alphabetically via an internal tree map structure.
 
 ### 4. Repository Metadata Model (`Repository.java` and `Modes.java`)
