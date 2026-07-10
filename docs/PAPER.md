@@ -325,7 +325,19 @@ private static String globToRegex(String glob) {
 ```
 - Pattern rules starting with `!` include files instead of ignoring them. Patterns anchored at the root directory must match from the top level, while other patterns match any segment of the file path.
 
-## 6. Dependencies & Build Requirements
+## 6. System Operations and Low-Level Behaviors
+
+This section explains how June handles specific situations and settings.
+
+### 1. Platform-Independent Link and Permission Mapping
+
+- Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
+- Links and executable settings are important for scripts and builds, but operating systems handle them differently.
+- June uses standard Java features in `Helper.java`. `Helper.entryMode()` checks if a file is a symbolic link to apply the `120000` mode, and checks if it is executable to apply the `100755` mode.
+- The destination of a symbolic link is read as a string and saved as the file content.
+- During checkout, if a file mode is `120000`, June recreates the symbolic link. If the mode is `100755`, it writes the file and marks it as executable.
+
+## 7. Dependencies & Build Requirements
 
 June does not use any external packages. It is written in pure Java and only uses standard library packages:
 
@@ -338,7 +350,7 @@ June does not use any external packages. It is written in pure Java and only use
 * `java.util.zip`: Handles file compression.
 * `java.time`: Handles date and time for commits.
 
-## 7. System Implementation Sequence and Class Dependency Reference
+## 8. System Implementation Sequence and Class Dependency Reference
 
 This section outlines how each class is built and how they work together.
 

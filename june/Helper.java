@@ -182,12 +182,15 @@ public final class Helper {
   }
 
   public static String entryMode(File file) {
-    return Modes.FILE;
+    if (Files.isSymbolicLink(file.toPath())) {
+      return Modes.SYMLINK;
+    }
+    return file.canExecute() ? Modes.EXECUTABLE : Modes.FILE;
   }
 
   public static String entrySha1(File file, String mode) {
     try {
-      if (false) {
+      if (mode.equals(Modes.SYMLINK) || Files.isSymbolicLink(file.toPath())) {
         return Sha1.objectId(
             ObjectTypes.BLOB,
             Files.readSymbolicLink(file.toPath()).toString().getBytes(StandardCharsets.UTF_8));
