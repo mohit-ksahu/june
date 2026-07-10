@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, and locks files to prevent concurrent write conflicts.
+1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, serializes and stores compressed objects, updates the staging index, locks files, and manages branch and tag references.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -47,13 +47,48 @@ By default, June looks for or creates this directory in the current directory. I
 ```
 [workspace_root]/
 ├── .june/
+│   ├── HEAD
 │   ├── index
 │   ├── refs/
 │   │   ├── heads/
+│   │   │   └── main
 │   │   └── tags/
 │   └── objects/
 │       ├── [2-char hex]/
 │       │   └── [38-char hex]
+```
+
+### Branches, Tags, and the HEAD Pointer
+
+References are text files that hold a commit hash. They are saved as plain text containing a 40-character SHA-1 string.
+- The `HEAD` pointer tells June which branch or commit is currently checked out.
+- Pointing to a branch uses a path (like `ref: refs/heads/main`), while checking out a specific commit or tag writes the commit hash directly.
+- Pointing `HEAD` to a branch file means June does not have to change the `HEAD` file directly every time a commit is made; instead, it just updates the branch file.
+- If `HEAD` starts with `ref: `, June follows the path to read the underlying branch file; otherwise, it returns the commit hash directly.
+
+```java
+public String getHeadTarget() throws IOException {
+  return headFile.exists() ? Files.readString(headFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+}
+
+public String getHeadCommitSha1() throws IOException {
+  String head = getHeadTarget();
+  if (head == null) return null;
+  if (head.startsWith("ref: ")) {
+    File refFile = headRefFile(head);
+    return refFile.exists() ? Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+  }
+  return head;
+}
+
+public void updateHeadRefOrCommit(String sha) throws IOException {
+  String head = getHeadTarget();
+  if (head != null && head.startsWith("ref: ")) {
+    writeWithLock(headRefFile(head), sha + "\n");
+  } else {
+    setHeadTarget(sha);
+  }
+}
 ```
 
 ### Staging Index Layout
@@ -286,7 +321,7 @@ This section outlines how each class is built and how they work together.
 
 ### 4. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
-* **Role**: Resolves local repository paths.
+* **Role**: Resolves local repository paths, updates active HEAD pointer states (symbolic and detached), and manages local properties config storage.
 * **Integrations**: Orchestrates interactions between the staging index, object storage, and ref sub-systems during checkouts and commits.
 
 # June
@@ -304,5 +339,6 @@ The main entry point is the `App` class in the `cmd` directory. When you run a c
 ### 1. `init`
 
 * **Syntax**: `june init`
-- You must initialize the repository before running other commands.
-- In `init`, June calls `repo.init()` to create `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/`.
+- Setting up a repository directory structure is necessary before running any other version control operations.
+- Creating the database directories initializes a fresh tracking scope. If the HEAD reference file is missing, June writes a default pointer targeting the main branch.
+- In `init`, June invokes `repo.init()` which generates `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/` directories.

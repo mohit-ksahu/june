@@ -110,6 +110,18 @@ public class App {
       tempIndex.delete();
       return;
     }
+    if (cmd.equals("update-ref")) {
+      if (args.length < 3) {
+        System.out.println("Usage: java App update-ref <refName> <sha1>");
+        System.exit(1);
+      }
+      File repoTarget = new File(".");
+      Repository repo = new Repository(repoTarget);
+      repo.setHeadTarget("ref: " + args[1]);
+      repo.updateHeadRefOrCommit(args[2]);
+      System.out.println("Updated reference " + args[1] + " to commit " + args[2]);
+      return;
+    }
     System.out.println("Unknown command: " + cmd);
   }
 
