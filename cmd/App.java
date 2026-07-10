@@ -30,6 +30,8 @@ public class App {
         case "reset" -> Reset.run(repo, rest);
         case "branch" -> Branch.run(repo, rest);
         case "tag" -> Tag.run(repo, rest);
+        case "config" -> Config.run(repo, rest);
+        case "cat-file" -> CatFile.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

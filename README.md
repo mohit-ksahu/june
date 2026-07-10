@@ -100,6 +100,21 @@ java -cp bin App init
 ```
 
 
+### 2. `config` — Manage Configuration Settings
+
+Read or write repository configuration parameters stored in `.june/config`:
+
+```bash
+# Set user name
+java -cp bin App config user.name "John Doe"
+
+# Set user email
+java -cp bin App config user.email "john@example.com"
+
+# Read a configuration value
+java -cp bin App config user.name
+```
+
 ### 3. `add` — Stage File Changes
 
 Stage files and directories to prepare them for the next commit:
@@ -209,6 +224,15 @@ java -cp bin App rm src/Legacy.java
 
 # Remove tracking but keep the physical file in the working directory
 java -cp bin App rm --cached src/Legacy.java
+```
+
+### 13. `cat-file` — Inspect Repository Objects
+
+Decompress and print raw database object details (blobs, trees, commits):
+
+```bash
+# Pretty-print the resolved contents of an object hash
+java -cp bin App cat-file -p a94a8f
 ```
 
 ### 16. `reset` — Hard Reset Reference State

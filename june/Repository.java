@@ -350,4 +350,13 @@ public class Repository {
   public String deleteTag(String name) throws java.io.IOException {
     return june.lib.Tag.delete(this, name);
   }
+  public String getConfig(String key) {
+    return june.lib.Config.get(this, key);
+  }
+  public void setConfig(String key, String value) throws java.io.IOException {
+    june.lib.Config.set(this, key, value);
+  }
+  public String catFile(String ref) throws java.io.IOException {
+    return june.lib.CatFile.catFile(this, ref);
+  }
 }

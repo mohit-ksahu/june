@@ -48,7 +48,9 @@ public static void main(String[] args) {
       case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
       case "tag" -> Tag.run(repo, rest);
+      case "config" -> Config.run(repo, rest);
       case "reset" -> Reset.run(repo, rest);
+      case "cat-file" -> CatFile.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -76,6 +78,7 @@ By default, June looks for or creates this directory in the current directory. I
 [workspace_root]/
 ├── .june/
 │   ├── HEAD
+│   ├── config
 │   ├── index
 │   ├── refs/
 │   │   ├── heads/
@@ -138,6 +141,30 @@ public Index(File indexFile) throws IOException {
       }
     }
   }
+}
+```
+
+### Configuration Management
+
+- Local settings are saved in `.june/config` so users can set a username and email for the repository.
+- June uses the standard Java properties format, which avoids writing custom parsing code or using external libraries.
+- In `Config.java`, June loads settings from `.june/config` and returns the value for the requested key. If the repository does not exist or the key is missing, it returns `null`.
+
+```java
+public static String get(Repository repo, String key) {
+  if (!repo.exists()) {
+    return null;
+  }
+  java.util.Properties props = new java.util.Properties();
+  File configFile = new File(repo.getRepoDir(), "config");
+  if (configFile.exists()) {
+    try (java.io.Reader reader = Files.newBufferedReader(configFile.toPath(), StandardCharsets.UTF_8)) {
+      props.load(reader);
+    } catch (IOException e) {
+      throw new OperationException("fatal: could not read config: " + e.getMessage());
+    }
+  }
+  return props.getProperty(key);
 }
 ```
 
@@ -853,6 +880,20 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command validates that target paths are currently tracked before executing deletions.
 - In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
 
+### 11. `cat-file`
+
+* **Syntax**: `june cat-file -p <object-sha1>`
+- Inspecting database objects displays decompressed payload details for debugging.
+- The command restricts access using the `-p` parameter for pretty-printing.
+- In `june.cmd.CatFile`, June verifies the pretty-print flag and outputs the resolved object contents.
+
+### 12. `config`
+
+* **Syntax**: `june config <key> [<value>]`
+- Configuring options sets local values for key variables like username and email.
+- The command splits reads (with one argument) from writes (with two arguments).
+- In `june.cmd.Config`, June checks the argument length to select read or write actions.
+
 ### 13. `reset`
 
 * **Syntax**: `june reset --hard [<commit-sha1>]`
@@ -872,8 +913,10 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
 * **Branch.java**: Detects listing vs deletion vs creation flags.
+* **CatFile.java**: Enforces `-p` parameters and prints outputs.
 * **Checkout.java**: Verifies target arguments and calls checkout.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
+* **Config.java**: Routes reading vs writing calls to config utilities.
 * **Init.java**: Calls the repository initialization method directly.
 * **Reset.java**: Validates `--hard` flags and commit targets.
 * **Restore.java**: Checks for `--staged` flags and path arrays.
@@ -894,6 +937,8 @@ In addition to command-line execution, the library exposes all features via dire
 | **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
+| **Inspect Objects** | `repo.catFile(String ref)` | `CatFile.java` |
+| **Manage Config** | `repo.getConfig(key)` / `repo.setConfig(key, val)` | `Config.java` |
 | **Reset State** | `repo.reset(String target)` | `Reset.java` |
 | **Branch Operations**| `repo.createBranch(name)` / `repo.listBranches()` / `repo.deleteBranch(name, force)` | `Branch.java` |
 | **Tag Operations** | `repo.createTag(name, sha)` / `repo.listTags()` / `repo.deleteTag(name)` | `Tag.java` |
