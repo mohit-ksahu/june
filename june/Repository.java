@@ -323,10 +323,13 @@ public class Repository {
   public june.lib.Status.StatusResult status() throws java.io.IOException {
     return june.lib.Status.status(this);
   }
+  public String checkout(String target) throws java.io.IOException {
+    return june.lib.Checkout.checkout(this, target);
+  }
   public String restore(java.util.List<String> paths, boolean staged) throws java.io.IOException {
     return june.lib.Restore.restore(this, paths, staged);
   }
-  public String checkout(String target) throws java.io.IOException {
-    return june.lib.Checkout.checkout(this, target);
+  public String reset(String target) throws java.io.IOException {
+    return june.lib.Reset.reset(this, target);
   }
 }

@@ -13,6 +13,7 @@ June supports a standard subset of operations:
 - **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
+- **Hard Resets**: Align the working directory and staging index directly with a target commit.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
@@ -171,4 +172,12 @@ java -cp bin App rm src/Legacy.java
 
 # Remove tracking but keep the physical file in the working directory
 java -cp bin App rm --cached src/Legacy.java
+```
+
+### 16. `reset` — Hard Reset Reference State
+
+Hard reset the working directory, staging index, and active branch references to a commit hash:
+
+```bash
+java -cp bin App reset --hard a94a8f
 ```

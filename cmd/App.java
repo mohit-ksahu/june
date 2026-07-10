@@ -27,6 +27,7 @@ public class App {
         case "status" -> Status.run(repo, rest);
         case "checkout" -> Checkout.run(repo, rest);
         case "restore" -> Restore.run(repo, rest);
+        case "reset" -> Reset.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

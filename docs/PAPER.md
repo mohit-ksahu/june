@@ -46,6 +46,7 @@ public static void main(String[] args) {
       case "checkout" -> Checkout.run(repo, rest);
       case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
+      case "reset" -> Reset.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -843,6 +844,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command validates that target paths are currently tracked before executing deletions.
 - In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
 
+### 13. `reset`
+
+* **Syntax**: `june reset --hard [<commit-sha1>]`
+- Hard resetting updates the workspace, index, and branch pointers to match a target commit.
+- The command requires a `--hard` flag to confirm that local modifications will be overwritten.
+- In `june.cmd.Reset`, June validates the hard reset flag and resolves the target commit hash.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
@@ -850,6 +858,7 @@ Each command has a dedicated wrapper class under `cmd/` to separate argument par
 * **Checkout.java**: Verifies target arguments and calls checkout.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
+* **Reset.java**: Validates `--hard` flags and commit targets.
 * **Restore.java**: Checks for `--staged` flags and path arrays.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
 * **Status.java**: Prints the results of the repository status call.
@@ -867,3 +876,4 @@ In addition to command-line execution, the library exposes all features via dire
 | **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
+| **Reset State** | `repo.reset(String target)` | `Reset.java` |
