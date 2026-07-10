@@ -311,4 +311,7 @@ public class Repository {
   }
 
   
+  public void add(java.util.List<String> paths) throws java.io.IOException {
+    june.lib.Add.add(this, paths);
+  }
 }
