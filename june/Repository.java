@@ -359,4 +359,7 @@ public class Repository {
   public String catFile(String ref) throws java.io.IOException {
     return june.lib.CatFile.catFile(this, ref);
   }
+  public java.util.List<june.lib.Log.LogEntry> log(int max) throws java.io.IOException {
+    return june.lib.Log.log(this, max);
+  }
 }

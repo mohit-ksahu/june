@@ -32,6 +32,7 @@ public class App {
         case "tag" -> Tag.run(repo, rest);
         case "config" -> Config.run(repo, rest);
         case "cat-file" -> CatFile.run(repo, rest);
+        case "log" -> Log.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

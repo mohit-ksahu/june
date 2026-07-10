@@ -51,6 +51,7 @@ public static void main(String[] args) {
       case "config" -> Config.run(repo, rest);
       case "reset" -> Reset.run(repo, rest);
       case "cat-file" -> CatFile.run(repo, rest);
+      case "log" -> Log.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -908,6 +909,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - The command lists existing tags, deletes reference files, or creates new tags pointing at HEAD or a resolved commit.
 - In `june.cmd.Tag`, June checks for tag deletion flags or name parameters to update tag references.
 
+### 16. `log`
+
+* **Syntax**: `june log [--oneline] [-n <count>] [--max-count <count>]`
+- The commit log displays the history of commits in reverse chronological order.
+- Logging traverses parent hashes from HEAD and supports compact formatting and count limits.
+- In `june.cmd.Log`, June parses options like `--oneline`, `-n`, and `--max-count` to format and filter the output list.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
@@ -918,6 +926,7 @@ Each command has a dedicated wrapper class under `cmd/` to separate argument par
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Config.java**: Routes reading vs writing calls to config utilities.
 * **Init.java**: Calls the repository initialization method directly.
+* **Log.java**: Checks for `--oneline` and `-n` limits.
 * **Reset.java**: Validates `--hard` flags and commit targets.
 * **Restore.java**: Checks for `--staged` flags and path arrays.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
@@ -937,6 +946,7 @@ In addition to command-line execution, the library exposes all features via dire
 | **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
+| **Log History** | `repo.log(int maxCount)` | `Log.java` |
 | **Inspect Objects** | `repo.catFile(String ref)` | `CatFile.java` |
 | **Manage Config** | `repo.getConfig(key)` / `repo.setConfig(key, val)` | `Config.java` |
 | **Reset State** | `repo.reset(String target)` | `Reset.java` |

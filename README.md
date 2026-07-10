@@ -14,6 +14,7 @@ June supports a standard subset of operations:
 - **Branches and Tags**: Create, list, and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
+- **Log Traversal**: Print chronological commit histories in standard or single-line formats.
 - **Hard Resets**: Align the working directory and staging index directly with a target commit.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
@@ -233,6 +234,26 @@ Decompress and print raw database object details (blobs, trees, commits):
 ```bash
 # Pretty-print the resolved contents of an object hash
 java -cp bin App cat-file -p a94a8f
+```
+
+### 14. `log` — View Commit History
+
+Display the commit logs in reverse chronological order:
+
+```bash
+# Print standard commit log history
+java -cp bin App log
+
+# Print condensed single-line log history
+java -cp bin App log --oneline
+
+# Limit the log to a specific count of commits
+java -cp bin App log -n 5
+# Or use the alias:
+java -cp bin App log --max-count 5
+
+# Combine formatting and count limit
+java -cp bin App log --oneline -n 5
 ```
 
 ### 16. `reset` — Hard Reset Reference State
