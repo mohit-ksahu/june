@@ -11,6 +11,7 @@ June supports a standard subset of operations:
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
 - **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
 - **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
+- **Branches and Tags**: Create, list, and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
 - **Hard Resets**: Align the working directory and staging index directly with a target commit.
@@ -135,6 +136,24 @@ java -cp bin App commit -m "Create initial project structure"
 java -cp bin App commit -a -m "Update configuration details"
 # Or combine the flags:
 java -cp bin App commit -am "Update configuration details"
+```
+
+### 7. `branch` — Manage Branches
+
+Manage branch references to track independent lines of development:
+
+```bash
+# List all local branches (active branch is marked with an asterisk)
+java -cp bin App branch
+
+# Create a new branch pointing to the current commit
+java -cp bin App branch feature-auth
+
+# Delete a branch (checks for unmerged history)
+java -cp bin App branch -d feature-auth
+
+# Force delete a branch
+java -cp bin App branch -D feature-auth
 ```
 
 ### 9. `checkout` — Switch Active States

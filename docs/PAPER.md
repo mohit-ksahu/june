@@ -43,6 +43,7 @@ public static void main(String[] args) {
       case "add" -> Add.run(repo, rest);
       case "commit" -> Commit.run(repo, rest);
       case "status" -> Status.run(repo, rest);
+      case "branch" -> Branch.run(repo, rest);
       case "checkout" -> Checkout.run(repo, rest);
       case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
@@ -823,6 +824,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - Re-routing status lists into a helper printer checks list boundaries, ensuring empty sections are not printed.
 - Writing the ANSI reset code at the end of each print section prevents color bleeding into subsequent terminal outputs.
 
+### 5. `branch`
+
+* **Syntax**: `june branch [-d | -D] [<branch-name>]`
+- Branches allow users to manage independent lines of development.
+- The command supports listing active branches, creating branch pointers at the current commit, or deleting branches.
+- In `june.cmd.Branch`, June parses delete flags (`-d` or `-D`) to call branch deletion routines, or routes to the branch creation logic if a raw name is specified.
+
 ### 6. `checkout`
 
 * **Syntax**: `june checkout <branch-name> | <commit-or-tag>`
@@ -855,6 +863,7 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
+* **Branch.java**: Detects listing vs deletion vs creation flags.
 * **Checkout.java**: Verifies target arguments and calls checkout.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
@@ -877,3 +886,4 @@ In addition to command-line execution, the library exposes all features via dire
 | **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
 | **Reset State** | `repo.reset(String target)` | `Reset.java` |
+| **Branch Operations**| `repo.createBranch(name)` / `repo.listBranches()` / `repo.deleteBranch(name, force)` | `Branch.java` |

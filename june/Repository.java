@@ -332,4 +332,10 @@ public class Repository {
   public String reset(String target) throws java.io.IOException {
     return june.lib.Reset.reset(this, target);
   }
+  public june.lib.Branch.BranchResult listBranches() throws java.io.IOException {
+    return june.lib.Branch.list(this);
+  }
+  public String createBranch(String name) throws java.io.IOException {
+    return june.lib.Branch.create(this, name);
+  }
 }
