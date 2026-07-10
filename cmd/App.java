@@ -24,6 +24,7 @@ public class App {
         case "add" -> Add.run(repo, rest);
         case "rm" -> Rm.run(repo, rest);
         case "commit" -> Commit.run(repo, rest);
+        case "status" -> Status.run(repo, rest);
         default -> System.out.println("Unknown command: " + command);
       }
     } catch (OperationException e) {

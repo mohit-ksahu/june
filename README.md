@@ -10,6 +10,7 @@ June supports a standard subset of operations:
 - **Repository Setup**: Initialize database directories (`.june/`) and configure default refs.
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
 - **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
+- **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
@@ -109,6 +110,15 @@ java -cp bin App add README.md build.gradle
 # Stage directory paths recursively
 java -cp bin App add docs/
 ```
+
+### 4. `status` — Show Workspace Changes
+
+View the difference between the working directory, staging index, and HEAD commit:
+
+```bash
+java -cp bin App status
+```
+This outputs the active branch name and lists staged changes, unstaged changes, and untracked files.
 
 ### 5. `commit` — Record a Commit Snapshot
 

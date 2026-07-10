@@ -320,4 +320,7 @@ public class Repository {
   public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws java.io.IOException {
     return june.lib.Commit.commit(this, msg, auto);
   }
+  public june.lib.Status.StatusResult status() throws java.io.IOException {
+    return june.lib.Status.status(this);
+  }
 }
