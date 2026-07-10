@@ -11,6 +11,7 @@ June supports a standard subset of operations:
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
 - **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
 - **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
+- **State Restoration**: Unstage changes or discard modifications in the working directory.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
@@ -132,6 +133,18 @@ java -cp bin App commit -m "Create initial project structure"
 java -cp bin App commit -a -m "Update configuration details"
 # Or combine the flags:
 java -cp bin App commit -am "Update configuration details"
+```
+
+### 10. `restore` — Discard Workspace and Index Changes
+
+Discard local edits or unstage files in the index:
+
+```bash
+# Discard working directory modifications and restore from the staging index
+java -cp bin App restore src/Main.java
+
+# Unstage files in the index (reverts index state back to HEAD commit)
+java -cp bin App restore --staged src/Main.java
 ```
 
 ### 11. `rm` — Remove Files from Tracking

@@ -43,6 +43,7 @@ public static void main(String[] args) {
       case "add" -> Add.run(repo, rest);
       case "commit" -> Commit.run(repo, rest);
       case "status" -> Status.run(repo, rest);
+      case "restore" -> Restore.run(repo, rest);
       case "rm" -> Rm.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
@@ -787,6 +788,13 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 - Re-routing status lists into a helper printer checks list boundaries, ensuring empty sections are not printed.
 - Writing the ANSI reset code at the end of each print section prevents color bleeding into subsequent terminal outputs.
 
+### 7. `restore`
+
+* **Syntax**: `june restore [--staged] <file>...`
+- Restore discards local modifications in files or unstages index entries.
+- The command routes paths and staging flags to the restoration utilities, expanding directories as needed.
+- In `june.cmd.Restore`, June parses the `--staged` option to choose between index modifications or workspace content resets.
+
 ### 9. `rm`
 
 * **Syntax**: `june rm [--cached] <file>...`
@@ -800,6 +808,7 @@ Each command has a dedicated wrapper class under `cmd/` to separate argument par
 * **Add.java**: Parses path lists and calls `repo.add()`.
 * **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
+* **Restore.java**: Checks for `--staged` flags and path arrays.
 * **Rm.java**: Extracts path specifications and `--cached` flags.
 * **Status.java**: Prints the results of the repository status call.
 
@@ -813,4 +822,5 @@ In addition to command-line execution, the library exposes all features via dire
 | **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
 | **Record Commit** | `repo.commit(String message, boolean autoStage)` | `Commit.java` |
 | **Check Status** | `repo.status()` | `Status.java` |
+| **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
 | **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |

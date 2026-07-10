@@ -323,4 +323,7 @@ public class Repository {
   public june.lib.Status.StatusResult status() throws java.io.IOException {
     return june.lib.Status.status(this);
   }
+  public String restore(java.util.List<String> paths, boolean staged) throws java.io.IOException {
+    return june.lib.Restore.restore(this, paths, staged);
+  }
 }
