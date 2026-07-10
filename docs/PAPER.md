@@ -41,6 +41,10 @@ public static void main(String[] args) {
     }
     switch (command) {
       case "add" -> Add.run(repo, rest);
+      case "commit" -> Commit.run(repo, rest);
+      case "status" -> Status.run(repo, rest);
+      case "restore" -> Restore.run(repo, rest);
+      case "rm" -> Rm.run(repo, rest);
       default -> {
         System.err.println("june: '" + command + "' is not a june command.");
         printUsage();
@@ -407,11 +411,126 @@ private static String globToRegex(String glob) {
 ```
 - Pattern rules starting with `!` include files instead of ignoring them. Patterns anchored at the root directory must match from the top level, while other patterns match any segment of the file path.
 
+### Conflict Detection, Workspace Sync, and Merging (`Helper.java` and `Merge.java`)
+
+Before modifying workspace files during checkout, reset, or merge, June checks for conflicts.
+
+- This check ensures that your unstaged changes or untracked files are not accidentally overwritten.
+- June compares the target commit, the staging index, and the files on disk.
+
+```java
+public static void checkConflicts(
+    Repository repo, Map<String, FileInfo> targetFiles, Index index, String operation)
+    throws IOException {
+  File rootDir = repo.getRootDir();
+  List<String> local = new ArrayList<>();
+  List<String> untracked = new ArrayList<>();
+
+  for (var targetEntry : targetFiles.entrySet()) {
+    String path = targetEntry.getKey();
+    FileInfo info = targetEntry.getValue();
+    if (index.getEntry(path) == null) {
+      File f = new File(rootDir, path);
+      if ((f.exists() || Files.isSymbolicLink(f.toPath()))
+          && !entrySha1(f, info.mode()).equals(info.sha1())) {
+        untracked.add(path);
+      }
+    }
+  }
+  for (Index.Entry e : index.getEntries()) {
+    File f = new File(rootDir, e.path());
+    if (!(f.exists() || Files.isSymbolicLink(f.toPath()))) {
+      continue;
+    }
+    if (entrySha1(f, e.mode()).equals(e.sha1())) {
+      continue;
+    }
+    FileInfo target = targetFiles.get(e.path());
+    if (target != null && entrySha1(f, target.mode()).equals(target.sha1())) {
+      continue;
+    }
+    if (target != null && e.sha1().equals(target.sha1()) && e.mode().equals(target.mode())) {
+      continue;
+    }
+    local.add(e.path());
+  }
+  // If local or untracked is not empty, throws an OperationException listing files
+}
+```
+If there are no conflicts, June updates the workspace by deleting files that are not in the target commit, writing the new files (including links and executable files), and updating the index.
+
+#### Ancestry Traversal (BFS Search)
+
+Checking if a commit is an ancestor of another commit is required to validate merges and branch deletions. This check determines if a merge can be fast-forwarded or if a branch is safe to delete.
+
+In `Helper.isAncestor()`, June searches the commit history graph using a queue and a visited set to find ancestors safely:
+
+```java
+public static boolean isAncestor(Repository repo, String ancestorSha, String descendentSha)
+    throws IOException {
+  if (ancestorSha == null || descendentSha == null) {
+    return false;
+  }
+  if (ancestorSha.equals(descendentSha)) {
+    return true;
+  }
+  Queue<String> queue = new LinkedList<>();
+  Set<String> visited = new HashSet<>();
+
+  queue.add(descendentSha);
+  visited.add(descendentSha);
+
+  while (!queue.isEmpty()) {
+    String sha = queue.poll();
+    if (sha.equals(ancestorSha)) {
+      return true;
+    }
+    try {
+      ObjectData obj = repo.read(sha);
+      if (obj instanceof Commit commit) {
+        for (String parent : commit.getParentSha1s()) {
+          if (!visited.contains(parent)) {
+            visited.add(parent);
+            queue.add(parent);
+          }
+        }
+      }
+    } catch (Exception ignored) {
+    }
+  }
+  return false;
+}
+```
+
+#### Fast-Forward Merge Execution
+
+June only supports fast-forward merges, where the active branch pointer is advanced directly to the target commit pointer if the current branch commit is a direct ancestor of the target.
+
+In `june.lib.Merge.merge()`, June performs the following logical checks and operations:
+1. Resolves the target string input to a target commit SHA-1 by looking up branch files under `.june/refs/heads/`, tag files under `.june/refs/tags/`, or falling back to a short SHA-1 resolution.
+2. If the current branch commit hash matches the target commit, or if the target commit is already an ancestor of the current branch, it skips action and returns `"Already up to date."`.
+3. If the current branch commit is an ancestor of the target commit, it initiates a fast-forward:
+   - Collects all files associated with the target commit's root tree directory.
+   - Performs working-tree conflict verification to ensure unstaged/untracked changes are not overwritten.
+   - Writes target files to the workspace and updates the staging index state.
+   - Updates the active branch reference pointer to the target commit SHA-1 and returns `"Fast-forward"`.
+4. If neither commit is an ancestor of the other, June throws an exception stating that non-fast-forward merges are not supported.
+
 ## 6. System Operations and Low-Level Behaviors
 
 This section explains how June handles specific situations and settings.
 
-### 1. Binary File Identification
+### 1. User Identity Resolution
+
+- June uses a series of fallbacks to find the username and email for commits.
+- This ensures every commit has a valid author name and email, even if they are not configured.
+- When creating a commit, June resolves the name and email by checking:
+  1. The local config file (`user.name` and `user.email`).
+  2. The system environment variable `USER`.
+  3. The Java system property `user.name` (defaults to `"June User"` if not set).
+  4. For the fallback email, June converts the name to lowercase, removes spaces, and adds `@localhost`.
+
+### 2. Binary File Identification
 
 - It is important to detect if a file contains binary data (like images or archives) rather than plain text.
 - Running text comparison algorithms on binary files is slow, uses too much memory, and prints unreadable text. Checking a small part of the file is fast and prevents this.
@@ -428,7 +547,13 @@ public static boolean isBinary(byte[] data) {
 }
 ```
 
-### 2. Platform-Independent Link and Permission Mapping
+### 3. Status Path Collapsing
+
+- Grouping untracked files in the same directory under a single folder name keeps the status output clean.
+- If you have an untracked directory containing many files, listing all of them would clutter the console.
+- In `june.lib.Status.status()`, if a folder is untracked and none of its files are tracked, June lists only the folder path (e.g., `dir/`) instead of listing every file inside it.
+
+### 4. Platform-Independent Link and Permission Mapping
 
 - Saving and restoring file permissions (like executable status) and symbolic links is required to support different operating systems.
 - Links and executable settings are important for scripts and builds, but operating systems handle them differently.
@@ -509,6 +634,8 @@ Below is a Java example showing how to initialize a repository, stage files, che
 
 ```java
 import june.Repository;
+import june.lib.Commit.CommitResult;
+import june.lib.Status.StatusResult;
 import java.io.File;
 import java.util.List;
 
@@ -527,6 +654,17 @@ public class ProgrammaticExample {
         // 3. Stage changes (equivalent to `june add`)
         repo.add(List.of("src/Main.java", "README.md"));
         System.out.println("Files staged successfully.");
+
+        // 4. Query current staging status (equivalent to `june status`)
+        StatusResult status = repo.status();
+        System.out.println("Active Branch: " + status.branch());
+        System.out.println("Staged files: " + status.staged());
+        System.out.println("Unstaged files: " + status.unstaged());
+        System.out.println("Untracked files: " + status.untracked());
+
+        // 5. Commit staged changes (equivalent to `june commit`)
+        CommitResult commit = repo.commit("feat: initial programmatic commit", false);
+        System.out.println("Created Commit: " + commit.commitSha1());
     }
 }
 ```
@@ -575,11 +713,104 @@ public static void run(Repository repo, String[] args) throws IOException {
 - Validating the arguments length before invoking the staging workflow prevents empty stages from running.
 - Passing the arguments as a standard Java list ensures compatibility with collection walking methods.
 
+### 3. `commit`
+
+* **Syntax**: `june commit [-a] -m <message>` or `june commit -am <message>`
+- Recording modifications in a commit permanently saves the staged state to the commit log.
+- Commits require a non-blank message parameter and optional auto-staging flags to automatically include modified tracked files.
+- In `june.cmd.Commit`, June iterates through argument inputs, toggling auto-stage state variables when encountering `-a` or `-am` flags, and extracting the trailing message parameter when encountering `-m` or `-am`.
+
+```java
+public static void run(Repository repo, String[] args) throws IOException {
+  String msg = null;
+  boolean auto = false;
+  for (int i = 0; i < args.length; i++) {
+    switch (args[i]) {
+      case "-a" -> auto = true;
+      case "-m", "-am" -> {
+        if (args[i].equals("-am")) {
+          auto = true;
+        }
+        if (i + 1 < args.length) {
+          msg = args[++i];
+        }
+      }
+      default -> {}
+    }
+  }
+  if (msg == null) {
+    throw new OperationException("fatal: no commit message specified (use -m \"message\")");
+  }
+  String result = repo.commit(msg, auto).message();
+  if (!result.isEmpty()) {
+    System.out.println(result);
+  }
+}
+```
+- Parsing the arguments with a switch loop allows options like `-a` and `-m` to be specified in any order.
+- Splicing the next argument index immediately when `-m` or `-am` is detected safely captures multi-word commit messages enclosed in quotes.
+- The command throws a clean operation exception if no message is found, preventing the creation of empty-labeled commits.
+
+### 4. `status`
+
+* **Syntax**: `june status`
+- Displaying unstaged, staged, and untracked changes helps users verify modifications before recording commits.
+- Grouping status results into clear categories and printing them in color makes changes easy to scan in the terminal.
+- In `june.cmd.Status`, June receives the categorized status model from the library layer, prints the branch name, and writes out staged files in green, and unstaged or untracked paths in red.
+
+```java
+private static final String ANSI_RESET = "\u001B[0m";
+private static final String ANSI_GREEN = "\u001B[32m";
+private static final String ANSI_RED = "\u001B[31m";
+
+public static void run(Repository repo, String[] args) throws IOException {
+  formatStatus(repo.status());
+}
+
+private static void formatStatus(june.lib.Status.StatusResult sr) {
+  System.out.println(sr.branch());
+  printSection("Changes to be committed:",
+      "  (use \"june restore --staged <file>...\" to unstage)",
+      formatChanges(sr.staged()), ANSI_GREEN);
+  printSection("Changes not staged for commit:",
+      "  (use \"june add <file>...\" to update what will be committed)\n"
+          + "  (use \"june restore <file>...\" to discard changes in working directory)",
+      formatChanges(sr.unstaged()), ANSI_RED);
+  printSection("Untracked files:",
+      "  (use \"june add <file>...\" to include in what will be committed)",
+      sr.untracked().stream().map(s -> "  " + s).toList(), ANSI_RED);
+  if (sr.staged().isEmpty() && sr.unstaged().isEmpty() && sr.untracked().isEmpty()) {
+    System.out.println("nothing to commit, working tree clean");
+  }
+}
+```
+- Defining ANSI color escape strings as static variables keeps the terminal formatting logic clear.
+- Re-routing status lists into a helper printer checks list boundaries, ensuring empty sections are not printed.
+- Writing the ANSI reset code at the end of each print section prevents color bleeding into subsequent terminal outputs.
+
+### 7. `restore`
+
+* **Syntax**: `june restore [--staged] <file>...`
+- Restore discards local modifications in files or unstages index entries.
+- The command routes paths and staging flags to the restoration utilities, expanding directories as needed.
+- In `june.cmd.Restore`, June parses the `--staged` option to choose between index modifications or workspace content resets.
+
+### 9. `rm`
+
+* **Syntax**: `june rm [--cached] <file>...`
+- Removing files untracks them from the index and optionally deletes them from the disk.
+- The command validates that target paths are currently tracked before executing deletions.
+- In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
+
 ## 3. Class Design of the commands
 
 Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
 * **Add.java**: Parses path lists and calls `repo.add()`.
+* **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
 * **Init.java**: Calls the repository initialization method directly.
+* **Restore.java**: Checks for `--staged` flags and path arrays.
+* **Rm.java**: Extracts path specifications and `--cached` flags.
+* **Status.java**: Prints the results of the repository status call.
 
 ## 4. Programmatic API Mapping
 
@@ -589,3 +820,7 @@ In addition to command-line execution, the library exposes all features via dire
 | :--- | :--- | :--- |
 | **Initialize** | `repo.init()` | `Init.java` |
 | **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
+| **Record Commit** | `repo.commit(String message, boolean autoStage)` | `Commit.java` |
+| **Check Status** | `repo.status()` | `Status.java` |
+| **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
+| **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |

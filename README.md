@@ -1,4 +1,5 @@
 # June
+
 June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
 
 The implementation separates the command-line adapter layer from reusable repository and feature logic, making the codebase clean, modular, and easy to extend.
@@ -8,6 +9,9 @@ The implementation separates the command-line adapter layer from reusable reposi
 June supports a standard subset of operations:
 - **Repository Setup**: Initialize database directories (`.june/`) and configure default refs.
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
+- **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
+- **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
+- **State Restoration**: Unstage changes or discard modifications in the working directory.
 - **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
 - **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
 
@@ -106,4 +110,51 @@ java -cp bin App add README.md build.gradle
 
 # Stage directory paths recursively
 java -cp bin App add docs/
+```
+
+### 4. `status` — Show Workspace Changes
+
+View the difference between the working directory, staging index, and HEAD commit:
+
+```bash
+java -cp bin App status
+```
+This outputs the active branch name and lists staged changes, unstaged changes, and untracked files.
+
+### 5. `commit` — Record a Commit Snapshot
+
+Save staged index modifications to the repository log history:
+
+```bash
+# Commit standard changes with a message
+java -cp bin App commit -m "Create initial project structure"
+
+# Automatically stage modified tracked files and commit
+java -cp bin App commit -a -m "Update configuration details"
+# Or combine the flags:
+java -cp bin App commit -am "Update configuration details"
+```
+
+### 10. `restore` — Discard Workspace and Index Changes
+
+Discard local edits or unstage files in the index:
+
+```bash
+# Discard working directory modifications and restore from the staging index
+java -cp bin App restore src/Main.java
+
+# Unstage files in the index (reverts index state back to HEAD commit)
+java -cp bin App restore --staged src/Main.java
+```
+
+### 11. `rm` — Remove Files from Tracking
+
+Stop tracking files and optionally remove them from the physical workspace:
+
+```bash
+# Remove tracking and delete the file from the disk
+java -cp bin App rm src/Legacy.java
+
+# Remove tracking but keep the physical file in the working directory
+java -cp bin App rm --cached src/Legacy.java
 ```
