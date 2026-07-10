@@ -94,20 +94,21 @@ public final class ObjectStore {
   }
 
   public ObjectData read(String sha1) throws IOException {
-    ObjectStream s = getObjectStream(sha1);
-    if (s.size() > MAX_OBJECT_SIZE) {
-      throw new IOException("Object too large: " + s.size() + " bytes");
+    try (ObjectStream s = getObjectStream(sha1)) {
+      if (s.size() > MAX_OBJECT_SIZE) {
+        throw new IOException("Object too large: " + s.size() + " bytes");
+      }
+      ByteArrayOutputStream buf = new ByteArrayOutputStream((int) s.size());
+      byte[] tmp = new byte[4096];
+      int n;
+      while ((n = s.inputStream().read(tmp)) != -1) {
+        buf.write(tmp, 0, n);
+      }
+      if (buf.size() != s.size()) {
+        throw new IOException("Malformed object: size mismatch");
+      }
+      return ObjectData.create(s.type(), buf.toByteArray());
     }
-    ByteArrayOutputStream buf = new ByteArrayOutputStream((int) s.size());
-    byte[] tmp = new byte[4096];
-    int n;
-    while ((n = s.inputStream().read(tmp)) != -1) {
-      buf.write(tmp, 0, n);
-    }
-    if (buf.size() != s.size()) {
-      throw new IOException("Malformed object: size mismatch");
-    }
-    return ObjectData.create(s.type(), buf.toByteArray());
   }
 
   public ObjectStream getObjectStream(String sha1) throws IOException {

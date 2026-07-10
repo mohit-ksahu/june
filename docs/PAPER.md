@@ -12,7 +12,7 @@ Separating the command-line interface from the core storage logic keeps the code
 
 ### The two layers:
 
-1. **The Storage and Utility Library (`june`)**: This layer manages repository paths, computes SHA-1 hashes, serializes objects, and persists compressed objects to key-value file storage.
+1. **The Storage and Utility Library (`june`)**: This layer handles repository paths, reads and writes compressed objects, updates the staging index, compiles ignore rules, calculates diffs, and locks files to prevent write conflicts.
 2. **The CLI (App and command classes)**: This layer parses command-line arguments, checks user inputs, prints formatted messages to the console, and exits with a non-zero code if something goes wrong.
 
 ### Command Dispatcher (`App.java`)
@@ -226,7 +226,7 @@ This section outlines how each class is built and how they work together.
 * **Role**: Implements zlib-compressed persistence, file reads/writes, and streaming access to the repository object database.
 * **Integrations**: Writes serialized object bytes to partitioned subdirectories based on computed SHA-1 hashes, and decompresses payload inputs up to a 10MB memory ceiling.
 
-### 3. Repository Metadata Model (`Repository.java` and `Modes.java`)
+### 4. Repository Metadata Model (`Repository.java` and `Modes.java`)
 
 * **Role**: Resolves local repository paths.
 
