@@ -46,6 +46,22 @@ public class Index {
     }
   }
 
+  public boolean remove(String path) {
+    return entries.remove(path) != null;
+  }
+
+  public Entry getEntry(String path) {
+    return entries.get(path);
+  }
+
+  public List<Entry> getEntries() {
+    return new ArrayList<>(entries.values());
+  }
+
+  public void clear() {
+    entries.clear();
+  }
+
   public void write() throws IOException {
     StringBuilder sb = new StringBuilder();
     for (Entry e : entries.values()) {
