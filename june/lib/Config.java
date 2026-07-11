@@ -22,7 +22,7 @@ public final class Config {
       try (java.io.Reader reader = Files.newBufferedReader(file.toPath(), StandardCharsets.UTF_8)) {
         properties.load(reader);
       } catch (IOException e) {
-        throw new OperationException("fatal: could not read config: " + e.getMessage());
+        throw new OperationException("could not read config: " + e.getMessage());
       }
     }
     return properties;

@@ -36,27 +36,20 @@ The code is organized into two distinct directories:
 
 ### 2. Compilation
 
-Clean and compile the library:
+Compile the codebase (both core library and CLI classes) into the `out/` directory:
 
 ```bash
-rm -rf out && mkdir -p out/june out/cmd
-javac -d out/june june/*.java june/lib/*.java
-```
-
-Compile the CLI wrapper (pointing classpath to the library):
-
-```bash
-javac -cp out/june -d out/cmd cmd/*.java
+javac -d out june/**/*.java cmd/**/*.java
 ```
 
 Or compile and package the application into JARs:
-- Reusable Library JAR:
+- **Reusable Library JAR** (excludes CLI):
   ```bash
-  jar --create --file june.jar -C out/june .
+  jar --create --file june.jar -C out june
   ```
-- Executable CLI Wrapper JAR:
+- **Executable CLI Wrapper JAR**:
   ```bash
-  jar --create --file cmd.jar --main-class App -C out/june . -C out/cmd .
+  jar --create --file cmd.jar --main-class App -C out .
   ```
 
 ### 3. Execution Entrypoint
@@ -65,7 +58,7 @@ Run command wrappers using either the compiled classpath or the packaged JAR:
 
 ```bash
 # Using classpath
-java -cp out/june:out/cmd App <command> [arguments]
+java -cp out App <command> [arguments]
 
 # Using JAR
 java -jar cmd.jar <command> [arguments]
@@ -88,7 +81,7 @@ To package a standalone execution environment that runs without requiring a pre-
 2. Run the application using the bundled JRE:
    ```bash
    # Using classpath
-   ./jre/bin/java -cp out/june:out/cmd App <command> [arguments]
+   ./jre/bin/java -cp out App <command> [arguments]
 
    # Using JAR
    ./jre/bin/java -jar cmd.jar <command> [arguments]

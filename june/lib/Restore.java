@@ -22,7 +22,7 @@ public final class Restore {
   public static String restore(Repository repo, List<String> paths, boolean staged)
       throws IOException {
     if (paths.isEmpty()) {
-      throw new OperationException("fatal: no paths specified");
+      throw new OperationException("no paths specified");
     }
     Index index = new Index(repo.getIndexFile());
     StringBuilder result = new StringBuilder();
@@ -41,7 +41,7 @@ public final class Restore {
         } else if (index.remove(path)) {
           appendLine(result, "Unstaged new file '" + path + "'");
         } else {
-          throw new OperationException("fatal: pathspec '" + path + "' did not match any files");
+          throw new OperationException("pathspec '" + path + "' did not match any files");
         }
       }
       index.write();

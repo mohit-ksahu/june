@@ -37,7 +37,7 @@ public final class Checkout {
             + "' did not match any file(s) known to june");
       }
       if (!(repo.read(commitSha) instanceof Commit)) {
-        throw new OperationException("fatal: object " + commitSha + " is not a commit");
+        throw new OperationException("object " + commitSha + " is not a commit");
       }
     }
     Commit commit = repo.readCommit(commitSha);

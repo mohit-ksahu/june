@@ -45,7 +45,7 @@ public final class App {
         }
       }
     } catch (OperationException e) {
-      System.err.println(e.getMessage());
+      System.err.println("fatal: " + e.getMessage());
       System.exit(1);
     } catch (Exception e) {
       System.err.println("fatal: " + e.getMessage());

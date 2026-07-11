@@ -27,7 +27,7 @@ public final class CatFile {
       }
     }
     if (sha == null) {
-      throw new OperationException("fatal: object " + ref + " not found");
+      throw new OperationException("object " + ref + " not found");
     }
     try (ObjectStream stream = repo.getObjectStream(sha)) {
       if (stream.type().equals(ObjectTypes.BLOB)) {

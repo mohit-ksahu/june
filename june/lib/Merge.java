@@ -17,11 +17,11 @@ public final class Merge {
   public static String merge(Repository repo, String target) throws IOException {
     if (target.isEmpty()) {
       throw new OperationException(
-          "fatal: merge requires a branch name, tag, or commit hash to merge");
+          "merge requires a branch name, tag, or commit hash to merge");
     }
     String currentSha = repo.getHeadCommitSha1();
     if (currentSha == null) {
-      throw new OperationException("fatal: HEAD is empty; cannot merge into an empty branch");
+      throw new OperationException("HEAD is empty; cannot merge into an empty branch");
     }
     String targetSha;
     File branchFile = repo.branchRefFile(target);
@@ -33,11 +33,11 @@ public final class Merge {
     } else {
       targetSha = Helper.resolveShortSha1(repo.getRepoDir(), target);
       if (targetSha == null) {
-        throw new OperationException("fatal: target '" + target + "' not found");
+        throw new OperationException("target '" + target + "' not found");
       }
     }
     if (!(repo.read(targetSha) instanceof Commit)) {
-      throw new OperationException("fatal: object " + targetSha + " is not a commit");
+      throw new OperationException("object " + targetSha + " is not a commit");
     }
     if (currentSha.equals(targetSha)) {
       return "Already up to date.";
@@ -55,6 +55,6 @@ public final class Merge {
       return "Already up to date.";
     }
     throw new OperationException(
-        "fatal: Not a fast-forward merge (non-fast-forward merges are not supported).");
+        "Not a fast-forward merge (non-fast-forward merges are not supported).");
   }
 }
