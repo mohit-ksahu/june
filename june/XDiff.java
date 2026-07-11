@@ -9,13 +9,13 @@ public class XDiff {
 
   private static class DiffOp {
     final char type;
-    final int oldLine;
+    final int line;
     final int newLine;
     final String text;
 
     DiffOp(char type, int oLine, int nLine, String text) {
       this.type = type;
-      this.oldLine = oLine;
+      this.line = oLine;
       this.newLine = nLine;
       this.text = text;
     }
@@ -33,7 +33,6 @@ public class XDiff {
     if (max == 0) {
       return new ArrayList<>();
     }
-
 
     int[] v = new int[2 * max + 1];
     List<int[]> history = new ArrayList<>();
@@ -131,60 +130,60 @@ public class XDiff {
         break;
       }
 
-      int start = Math.max(0, i - CONTEXT_LINES);
-      int end = i;
+      int from = Math.max(0, i - CONTEXT_LINES);
+      int to = i;
 
-      while (end < ops.size()) {
-        int nextChange = end + 1;
+      while (to < ops.size()) {
+        int nextChange = to + 1;
         while (nextChange < ops.size() && ops.get(nextChange).type == ' ') {
           nextChange++;
         }
-        if (nextChange >= ops.size() || nextChange - end > 2 * CONTEXT_LINES) {
-          end = Math.min(ops.size() - 1, end + CONTEXT_LINES);
+        if (nextChange >= ops.size() || nextChange - to > 2 * CONTEXT_LINES) {
+          to = Math.min(ops.size() - 1, to + CONTEXT_LINES);
           break;
         }
-        end = nextChange;
+        to = nextChange;
       }
 
-      int oldStart = -1;
+      int start = -1;
       int newStart = -1;
-      int oldCount = 0;
+      int count = 0;
       int newCount = 0;
 
-      for (int j = start; j <= end; j++) {
+      for (int j = from; j <= to; j++) {
         DiffOp op = ops.get(j);
-        if (oldStart == -1 && op.oldLine != -1) {
-          oldStart = op.oldLine;
+        if (start == -1 && op.line != -1) {
+          start = op.line;
         }
         if (newStart == -1 && op.newLine != -1) {
           newStart = op.newLine;
         }
         switch (op.type) {
           case ' ' -> {
-            oldCount++;
+            count++;
             newCount++;
           }
-          case '-' -> oldCount++;
+          case '-' -> count++;
           case '+' -> newCount++;
           default -> {}
         }
       }
 
-      if (oldStart == -1) {
-        oldStart = 1;
+      if (start == -1) {
+        start = 1;
       }
       if (newStart == -1) {
         newStart = 1;
       }
 
-      output.add("@@ -" + oldStart + "," + oldCount + " +" + newStart + "," + newCount + " @@");
+      output.add("@@ -" + start + "," + count + " +" + newStart + "," + newCount + " @@");
 
-      for (int j = start; j <= end; j++) {
+      for (int j = from; j <= to; j++) {
         DiffOp op = ops.get(j);
         output.add(op.type + op.text);
       }
 
-      i = end + 1;
+      i = to + 1;
     }
 
     return output;
