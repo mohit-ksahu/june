@@ -34,11 +34,11 @@ public final class Branch {
 
   public static String create(Repository repo, String name) throws IOException {
     if (repo.branchExists(name)) {
-      throw new OperationException("fatal: A branch named '" + name + "' already exists.");
+      throw new OperationException("A branch named '" + name + "' already exists.");
     }
     String sha = repo.getHeadCommitSha1();
     if (sha == null) {
-      throw new OperationException("fatal: Not a valid object name: '" + name + "'.");
+      throw new OperationException("Not a valid object name: '" + name + "'.");
     }
     repo.updateBranchRef(name, sha);
     return "Branch '" + name + "' created at " + sha.substring(0, 7);
@@ -69,7 +69,7 @@ public final class Branch {
       throw new OperationException("error: branch '" + oldName + "' not found.");
     }
     if (repo.branchExists(newName)) {
-      throw new OperationException("fatal: branch '" + newName + "' already exists.");
+      throw new OperationException("branch '" + newName + "' already exists.");
     }
     String sha = repo.readBranchRef(oldName);
     repo.updateBranchRef(newName, sha);

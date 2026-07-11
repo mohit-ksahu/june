@@ -16,12 +16,12 @@ public final class Reset {
     if (target == null || target.equalsIgnoreCase("HEAD")) {
       sha = repo.getHeadCommitSha1();
       if (sha == null) {
-        throw new OperationException("fatal: HEAD is empty; nothing to reset to");
+        throw new OperationException("HEAD is empty; nothing to reset to");
       }
     } else {
       sha = Helper.resolveShortSha1(repo.getRepoDir(), target);
       if (sha == null) {
-        throw new OperationException("fatal: commit '" + target + "' not found");
+        throw new OperationException("commit '" + target + "' not found");
       }
     }
     Commit commit = repo.readCommit(sha);

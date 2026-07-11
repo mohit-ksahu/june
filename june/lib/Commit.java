@@ -21,7 +21,7 @@ public final class Commit {
   public static CommitResult commit(Repository repo, String message, boolean autoStage)
       throws IOException {
     if (message == null || message.isBlank()) {
-      throw new OperationException("fatal: empty commit message");
+      throw new OperationException("empty commit message");
     }
     Index index = new Index(repo.getIndexFile());
     if (autoStage) {

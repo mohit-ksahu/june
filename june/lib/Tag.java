@@ -14,7 +14,7 @@ public final class Tag {
 
   public static void create(Repository repo, String name, String sha) throws IOException {
     if (repo.tagExists(name)) {
-      throw new OperationException("fatal: tag '" + name + "' already exists");
+      throw new OperationException("tag '" + name + "' already exists");
     }
     repo.createTag(name, sha);
   }

@@ -18,11 +18,11 @@ public final class Mv {
     Index index = new Index(repo.getIndexFile());
     String relSource = repo.getRelativePath(sourcePath);
     if (index.getEntry(relSource) == null) {
-      throw new OperationException("fatal: not under version control, source=" + sourcePath);
+      throw new OperationException("not under version control, source=" + sourcePath);
     }
     File sourceFile = new File(repo.getRootDir(), relSource);
     if (!sourceFile.exists() && !Files.isSymbolicLink(sourceFile.toPath())) {
-      throw new OperationException("fatal: source file '" + sourcePath + "' does not exist");
+      throw new OperationException("source file '" + sourcePath + "' does not exist");
     }
     String relDest = repo.getRelativePath(destinationPath);
     File destinationFile = new File(repo.getRootDir(), relDest);
@@ -36,7 +36,7 @@ public final class Mv {
     Index.Entry destEntry = index.getEntry(relDest);
     if (destinationFile.exists() || Files.isSymbolicLink(destinationFile.toPath())) {
       if (destEntry == null) {
-        throw new OperationException("fatal: destination already exists");
+        throw new OperationException("destination already exists");
       } else {
         String mode = Helper.entryMode(destinationFile);
         String sha = Helper.entrySha1(destinationFile, mode);

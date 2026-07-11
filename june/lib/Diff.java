@@ -30,26 +30,26 @@ public final class Diff {
         Helper.FileInfo headFile = headFiles.get(entry.path());
         if (headFile == null) {
           appendHeader(output, entry.path(), "new file mode " + entry.mode());
-          appendColorLine(output, "--- /dev/null", true);
-          appendColorLine(output, "+++ b/" + entry.path(), false);
+          appendLine(output, "--- /dev/null");
+          appendLine(output, "+++ b/" + entry.path());
           byte[] data = repo.read(entry.sha1()).getData();
           if (!Helper.isBinary(data)) {
             for (String line : new String(data, StandardCharsets.UTF_8).split("\n", -1)) {
-              appendColorLine(output, "+" + line, false);
+              appendLine(output, "+" + line);
             }
           }
         } else if (!headFile.sha1().equals(entry.sha1())) {
           appendHeader(output, entry.path(), null);
-          appendColorLine(output, "--- a/" + entry.path(), true);
-          appendColorLine(output, "+++ b/" + entry.path(), false);
+          appendLine(output, "--- a/" + entry.path());
+          appendLine(output, "+++ b/" + entry.path());
           appendDiff(output, repo.read(headFile.sha1()).getData(), repo.read(entry.sha1()).getData());
         }
       }
       for (var headEntry : headFiles.entrySet()) {
         if (index.getEntry(headEntry.getKey()) == null) {
           appendHeader(output, headEntry.getKey(), "deleted file mode " + headEntry.getValue().mode());
-          appendColorLine(output, "--- a/" + headEntry.getKey(), true);
-          appendColorLine(output, "+++ /dev/null", false);
+          appendLine(output, "--- a/" + headEntry.getKey());
+          appendLine(output, "+++ /dev/null");
         }
       }
     } else {
@@ -58,20 +58,20 @@ public final class Diff {
         boolean exists = targetFile.exists() || Files.isSymbolicLink(targetFile.toPath());
         if (!exists) {
           appendHeader(output, entry.path(), "deleted file mode " + entry.mode());
-          appendColorLine(output, "--- a/" + entry.path(), true);
-          appendColorLine(output, "+++ /dev/null", false);
+          appendLine(output, "--- a/" + entry.path());
+          appendLine(output, "+++ /dev/null");
           byte[] data = repo.read(entry.sha1()).getData();
           if (!Helper.isBinary(data)) {
             for (String line : new String(data, StandardCharsets.UTF_8).split("\n", -1)) {
-              appendColorLine(output, "-" + line, true);
+              appendLine(output, "-" + line);
             }
           }
         } else {
           String currentSha = Helper.entrySha1(targetFile, entry.mode());
           if (!currentSha.equals(entry.sha1())) {
             appendHeader(output, entry.path(), null);
-            appendColorLine(output, "--- a/" + entry.path(), true);
-            appendColorLine(output, "+++ b/" + entry.path(), false);
+            appendLine(output, "--- a/" + entry.path());
+            appendLine(output, "+++ b/" + entry.path());
             byte[] oldBytes = repo.read(entry.sha1()).getData();
             byte[] newBytes = entry.mode().equals(june.Modes.SYMLINK)
                 ? Files.readSymbolicLink(targetFile.toPath()).toString().getBytes(StandardCharsets.UTF_8)
@@ -91,8 +91,8 @@ public final class Diff {
     }
   }
 
-  private static void appendColorLine(StringBuilder sb, String text, boolean red) {
-    sb.append(red ? "\u001B[31m" : "\u001B[32m").append(text).append("\u001B[0m").append("\n");
+  private static void appendLine(StringBuilder sb, String text) {
+    sb.append(text).append("\n");
   }
 
   private static void appendDiff(StringBuilder sb, byte[] bytes, byte[] newBytes) {
@@ -102,13 +102,7 @@ public final class Diff {
       for (String line : XDiff.diffLines(
           Arrays.asList(new String(bytes, StandardCharsets.UTF_8).split("\n", -1)),
           Arrays.asList(new String(newBytes, StandardCharsets.UTF_8).split("\n", -1)))) {
-        if (line.startsWith("-")) {
-          appendColorLine(sb, line, true);
-        } else if (line.startsWith("+")) {
-          appendColorLine(sb, line, false);
-        } else {
-          sb.append(line).append("\n");
-        }
+        appendLine(sb, line);
       }
     }
   }

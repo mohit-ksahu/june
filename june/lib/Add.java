@@ -25,7 +25,7 @@ public final class Add {
         if (index.getEntry(relPath) != null) {
           index.remove(relPath);
         } else {
-          throw new OperationException("fatal: pathspec '" + rawPath + "' did not match any files");
+          throw new OperationException("pathspec '" + rawPath + "' did not match any files");
         }
       } else {
         List<File> files = new ArrayList<>();
