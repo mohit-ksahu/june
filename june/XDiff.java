@@ -13,10 +13,10 @@ public class XDiff {
     final int newLine;
     final String text;
 
-    DiffOp(char type, int oLine, int nLine, String text) {
+    DiffOp(char type, int line, int newLine, String text) {
       this.type = type;
-      this.line = oLine;
-      this.newLine = nLine;
+      this.line = line;
+      this.newLine = newLine;
       this.text = text;
     }
   }
