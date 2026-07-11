@@ -6,7 +6,6 @@ import java.util.List;
 
 public class XDiff {
   private static final int CONTEXT_LINES = 3;
-  private static final int MAX_LINES = 5_000;
 
   private static class DiffOp {
     final char type;
@@ -23,6 +22,10 @@ public class XDiff {
   }
 
   public static List<String> diffLines(List<String> originalLines, List<String> newLines) {
+    return diffLines(originalLines, newLines, false);
+  }
+
+  public static List<String> diffLines(List<String> originalLines, List<String> newLines, boolean fullContext) {
     int n = originalLines.size();
     int m = newLines.size();
     int max = n + m;
@@ -30,9 +33,7 @@ public class XDiff {
     if (max == 0) {
       return new ArrayList<>();
     }
-    if (max > MAX_LINES) {
-      return List.of("@@ file too large to diff (" + max + " lines; limit " + MAX_LINES + ") @@");
-    }
+
 
     int[] v = new int[2 * max + 1];
     List<int[]> history = new ArrayList<>();
@@ -111,8 +112,16 @@ public class XDiff {
 
     Collections.reverse(ops);
 
-    List<String> output = new ArrayList<>();
+    if (fullContext) {
+      List<String> output = new ArrayList<>();
+      output.add("@@ -1," + n + " +1," + m + " @@");
+      for (DiffOp op : ops) {
+        output.add(op.type + op.text);
+      }
+      return output;
+    }
 
+    List<String> output = new ArrayList<>();
     int i = 0;
     while (i < ops.size()) {
       while (i < ops.size() && ops.get(i).type == ' ') {
