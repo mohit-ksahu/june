@@ -1,4 +1,4 @@
-# June CLI Commands Reference Manual
+# June CLI Commands Reference
 
 June command endpoints parse inputs, enforce validation rules, and route arguments to the `june.lib` library.
 

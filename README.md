@@ -25,8 +25,8 @@ June supports a standard subset of operations:
 ## Codebase Structure
 
 The code is organized into two distinct directories:
-1. **`june/`**: Contains the reusable base library under package `june` and package `june.lib`. This manages underlying operations (Repository, ObjectStore, Index, Diff) and the main logical workflows.
-2. **`cmd/`**: Contains the CLI wrapper under the default package. It handles user inputs parsing (via `App.java` main method) and CLI terminal feedback formatters.
+1. **`june/`**: Contains the reusable base library under package `june` and package `june.lib`. This manages underlying operations (Repository, ObjectStore, Index, Diff) and the main logical workflows. See the [June Architecture & Specification](june/README.md) for more details.
+2. **`cmd/`**: Contains the CLI wrapper under the default package. It handles user inputs parsing (via `App.java` main method) and CLI terminal feedback formatters. See the [June CLI Commands Reference](cmd/README.md) for command specifications.
 
 ## Build and Setup
 
