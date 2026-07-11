@@ -6,6 +6,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import june.Helper;
 import june.Index;
@@ -94,12 +95,12 @@ public final class Diff {
     sb.append(red ? "\u001B[31m" : "\u001B[32m").append(text).append("\u001B[0m").append("\n");
   }
 
-  private static void appendDiff(StringBuilder sb, byte[] oldBytes, byte[] newBytes) {
-    if (Helper.isBinary(oldBytes) || Helper.isBinary(newBytes)) {
+  private static void appendDiff(StringBuilder sb, byte[] bytes, byte[] newBytes) {
+    if (Helper.isBinary(bytes) || Helper.isBinary(newBytes)) {
       sb.append("Binary files differ\n");
     } else {
       for (String line : XDiff.diffLines(
-          Arrays.asList(new String(oldBytes, StandardCharsets.UTF_8).split("\n", -1)),
+          Arrays.asList(new String(bytes, StandardCharsets.UTF_8).split("\n", -1)),
           Arrays.asList(new String(newBytes, StandardCharsets.UTF_8).split("\n", -1)))) {
         if (line.startsWith("-")) {
           appendColorLine(sb, line, true);
