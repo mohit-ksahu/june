@@ -74,7 +74,7 @@ public class Repository {
     String rel = rootDir.getAbsoluteFile().toPath().normalize()
         .relativize(absFile.toPath().normalize()).toString().replace('\\', '/');
     if (rel.startsWith("../") || rel.equals("..")) {
-      throw new OperationException("fatal: " + path + " is outside repository");
+      throw new OperationException(path + " is outside repository");
     }
     return (rel.equals(".") || rel.isEmpty()) ? "" : rel;
   }
@@ -144,6 +144,22 @@ public class Repository {
     return head;
   }
 
+  public String resolveRef(String ref) throws IOException {
+    if (ref == null || ref.isEmpty()) {
+      return null;
+    }
+    if (ref.equals("HEAD")) {
+      return getHeadCommitSha1();
+    }
+    if (branchExists(ref)) {
+      return readBranchRef(ref);
+    }
+    if (tagExists(ref)) {
+      return readTagRef(ref);
+    }
+    return Helper.resolveShortSha1(repoDir, ref);
+  }
+
   public void updateBranchRef(String name, String sha) throws IOException {
     writeWithLock(branchRefFile(name), sha + "\n");
   }
@@ -157,7 +173,7 @@ public class Repository {
     }
   }
 
-  public List<String> getBranches() {
+  public List<String> getBranches() throws IOException {
     return listRefs(headsDir);
   }
 
@@ -173,17 +189,17 @@ public class Repository {
   public String deleteBranchRef(String name) throws IOException {
     File refFile = branchRefFile(name);
     if (!refFile.isFile()) {
-      throw new OperationException("error: branch '" + name + "' not found.");
+      throw new OperationException("branch '" + name + "' not found.");
     }
     String sha = Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim();
     if (!refFile.delete()) {
-      throw new IOException("fatal: could not delete branch ref: " + refFile);
+      throw new IOException("could not delete branch ref: " + refFile);
     }
     Helper.deleteEmptyParentDirs(refFile.getParentFile(), headsDir);
     return sha;
   }
 
-  public List<String> getTags() {
+  public List<String> getTags() throws IOException {
     return listRefs(tagsDir);
   }
 
@@ -198,7 +214,7 @@ public class Repository {
 
   public void createTag(String name, String sha) throws IOException {
     if (tagExists(name)) {
-      throw new OperationException("fatal: tag '" + name + "' already exists");
+      throw new OperationException("tag '" + name + "' already exists");
     }
     writeWithLock(tagRefFile(name), sha + "\n");
   }
@@ -206,17 +222,17 @@ public class Repository {
   public String deleteTagRef(String name) throws IOException {
     File refFile = tagRefFile(name);
     if (!refFile.isFile()) {
-      throw new OperationException("error: tag '" + name + "' not found.");
+      throw new OperationException("tag '" + name + "' not found.");
     }
     String sha = Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim();
     if (!refFile.delete()) {
-      throw new IOException("fatal: could not delete tag ref: " + refFile);
+      throw new IOException("could not delete tag ref: " + refFile);
     }
     Helper.deleteEmptyParentDirs(refFile.getParentFile(), tagsDir);
     return sha;
   }
 
-  public String write(ObjectData obj) throws IOException {
+  public String write(ObjectData obj) throws Exception {
     return objects.write(obj);
   }
 
@@ -227,7 +243,7 @@ public class Repository {
   public Commit readCommit(String sha) throws IOException {
     ObjectData obj = objects.read(sha);
     if (!(obj instanceof Commit c)) {
-      throw new OperationException("fatal: object " + sha + " is a " + obj.getType() + ", not a commit");
+      throw new OperationException("object " + sha + " is a " + obj.getType() + ", not a commit");
     }
     return c;
   }
@@ -252,11 +268,11 @@ public class Repository {
 
   public File headRefFile(String headTarget) {
     if (headTarget == null || !headTarget.startsWith(REF_PREFIX)) {
-      throw new OperationException("fatal: malformed HEAD reference");
+      throw new OperationException("malformed HEAD reference");
     }
     String ref = headTarget.substring(REF_PREFIX.length()).trim();
     if (ref.isEmpty()) {
-      throw new OperationException("fatal: malformed HEAD reference");
+      throw new OperationException("malformed HEAD reference");
     }
     validateRefPath(ref);
     return new File(repoDir, ref);
@@ -265,18 +281,18 @@ public class Repository {
   private static void validateRefPath(String path) {
     if (path == null || path.isBlank() || path.contains("\0") || path.startsWith("/")
         || path.contains("..") || path.contains("\\")) {
-      throw new OperationException("fatal: invalid ref path: " + path);
+      throw new OperationException("invalid ref path: " + path);
     }
   }
 
   private static void validateRefName(String name) {
     if (name == null || name.isBlank() || name.contains("\0") || name.contains("..")
         || name.startsWith("/") || name.contains("\\")) {
-      throw new OperationException("fatal: invalid ref name: " + name);
+      throw new OperationException("invalid ref name: " + name);
     }
   }
 
-  public String writeFileOrSymlinkTarget(File target, String mode) throws IOException {
+  public String writeFileOrSymlinkTarget(File target, String mode) throws Exception {
     if (mode.equals(Modes.SYMLINK)) {
       String linkTarget = Files.readSymbolicLink(target.toPath()).toString();
       return write(new ObjectData(ObjectTypes.BLOB, linkTarget.getBytes(StandardCharsets.UTF_8)));
@@ -287,106 +303,95 @@ public class Repository {
   public void writeWithLock(File target, String content) throws IOException {
     File lock = new File(target.getParentFile(), target.getName() + ".lock");
     FileLock.acquireOrBreak(lock);
-    try {
-      Files.writeString(lock.toPath(), content, StandardCharsets.UTF_8);
-      Files.move(lock.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
-    } catch (IOException e) {
-      lock.delete();
-      throw e;
-    }
+    Files.writeString(lock.toPath(), content, StandardCharsets.UTF_8);
+    Files.move(lock.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
   }
 
-  private List<String> listRefs(File dir) {
+  private List<String> listRefs(File dir) throws IOException {
     if (!dir.isDirectory()) {
-      return new ArrayList<>();
+      return List.of();
     }
     try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(dir.toPath())) {
       return stream.filter(Files::isRegularFile)
           .map(p -> dir.toPath().relativize(p).toString().replace('\\', '/'))
           .sorted()
-          .collect(java.util.stream.Collectors.toList());
-    } catch (IOException e) {
-      return new ArrayList<>();
+          .toList();
     }
   }
 
-  public void add(List<String> paths) throws IOException {
+  public void add(List<String> paths) throws Exception {
     june.lib.Add.add(this, paths);
   }
 
-  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws IOException {
+  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws Exception {
     return june.lib.Commit.commit(this, msg, auto);
   }
 
-  public june.lib.Status.StatusResult status() throws IOException {
+  public june.lib.Status.StatusResult status() throws Exception {
     return june.lib.Status.status(this);
   }
 
-  public june.lib.Branch.BranchResult listBranches() throws IOException {
+  public june.lib.Branch.BranchResult listBranches() throws Exception {
     return june.lib.Branch.list(this);
   }
 
-  public String createBranch(String name) throws IOException {
+  public String createBranch(String name) throws Exception {
     return june.lib.Branch.create(this, name);
   }
 
-  public String deleteBranch(String name, boolean force) throws IOException {
+  public String deleteBranch(String name, boolean force) throws Exception {
     return june.lib.Branch.delete(this, name, force);
   }
 
-  public String renameBranch(String old, String newName) throws IOException {
-    return june.lib.Branch.rename(this, old, newName);
-  }
-
-  public String checkout(String target) throws IOException {
+  public String checkout(String target) throws Exception {
     return june.lib.Checkout.checkout(this, target);
   }
 
-  public String restore(List<String> paths, boolean staged) throws IOException {
+  public String restore(List<String> paths, boolean staged) throws Exception {
     return june.lib.Restore.restore(this, paths, staged);
   }
 
-  public String diff(boolean staged) throws IOException {
+  public String diff(boolean staged) throws Exception {
     return june.lib.Diff.diff(this, staged);
   }
 
-  public String rm(List<String> paths, boolean cached) throws IOException {
+  public String rm(List<String> paths, boolean cached) throws Exception {
     return june.lib.Rm.rm(this, paths, cached);
   }
 
-  public String mv(String src, String dest) throws IOException {
+  public String mv(String src, String dest) throws Exception {
     return june.lib.Mv.mv(this, src, dest);
   }
 
-  public List<String> listTags() {
+  public List<String> listTags() throws Exception {
     return june.lib.Tag.list(this);
   }
 
-  public String deleteTag(String name) throws IOException {
+  public String deleteTag(String name) throws Exception {
     return june.lib.Tag.delete(this, name);
   }
 
-  public String merge(String target) throws IOException {
+  public String merge(String target) throws Exception {
     return june.lib.Merge.merge(this, target);
   }
 
-  public String reset(String target) throws IOException {
+  public String reset(String target) throws Exception {
     return june.lib.Reset.reset(this, target);
   }
 
-  public List<june.lib.Log.LogEntry> log(int max) throws IOException {
+  public List<june.lib.Log.LogEntry> log(int max) throws Exception {
     return june.lib.Log.log(this, max);
   }
 
-  public String catFile(String ref) throws IOException {
+  public String catFile(String ref) throws Exception {
     return june.lib.CatFile.catFile(this, ref);
   }
 
-  public String getConfig(String key) {
+  public String getConfig(String key) throws Exception {
     return june.lib.Config.get(this, key);
   }
 
-  public void setConfig(String key, String value) throws IOException {
+  public void setConfig(String key, String value) throws Exception {
     june.lib.Config.set(this, key, value);
   }
 }

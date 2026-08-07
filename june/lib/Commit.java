@@ -19,7 +19,7 @@ public final class Commit {
   private Commit() {}
 
   public static CommitResult commit(Repository repo, String message, boolean autoStage)
-      throws IOException {
+      throws Exception {
     if (message == null || message.isBlank()) {
       throw new OperationException("empty commit message");
     }
@@ -31,7 +31,7 @@ public final class Commit {
           String mode = Helper.entryMode(target);
           String sha = Helper.entrySha1(target, mode);
           if (!sha.equals(entry.sha1()) || !mode.equals(entry.mode())) {
-            index.add(repo.writeFileOrSymlinkTarget(target, mode), mode, entry.path());
+            index.add(repo.writeFileOrSymlinkTarget(target, mode), mode, entry.path(), target.length(), Helper.fileModifiedTime(target));
           }
         } else {
           index.remove(entry.path());
@@ -71,14 +71,14 @@ public final class Commit {
     String tz = now.format(DateTimeFormatter.ofPattern("xx"));
     String name = Config.get(repo, "user.name");
     if (name == null || name.isEmpty()) {
-      name = System.getenv("USER");
-      if (name == null || name.isEmpty()) {
-        name = System.getProperty("user.name", "June User");
-      }
+      name = System.getenv("JUNE_AUTHOR_NAME");
     }
     String email = Config.get(repo, "user.email");
     if (email == null || email.isEmpty()) {
-      email = name.toLowerCase().replaceAll("\\s+", "") + "@localhost";
+      email = System.getenv("JUNE_AUTHOR_EMAIL");
+    }
+    if (name == null || name.isEmpty() || email == null || email.isEmpty()) {
+      throw new OperationException("Author identity unknown. Please set 'user.name' and 'user.email' via june config.");
     }
     String author = name + " <" + email + "> " + ts + " " + tz;
     String commitSha = repo.write(new june.Commit(treeSha, parents, author, author, message));

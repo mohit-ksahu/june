@@ -19,7 +19,6 @@ import java.util.zip.InflaterInputStream;
 
 public final class ObjectStore {
   public static final String OBJECTS_DIR_NAME = "objects";
-  private static final int MAX_OBJECT_SIZE = 10 * 1024 * 1024;
   private static final int BUFFER_SIZE = 8192;
 
   private final File objectsDir;
@@ -40,7 +39,7 @@ public final class ObjectStore {
     return new File(dir, sha1.substring(2));
   }
 
-  public String write(ObjectData object) throws IOException {
+  public String write(ObjectData object) throws Exception {
     byte[] serialized = object.serialize();
     String sha1 = Sha1.hash(serialized);
     File file = getObjectFile(sha1, true);
@@ -49,24 +48,14 @@ public final class ObjectStore {
       try (DeflaterOutputStream out = new DeflaterOutputStream(new FileOutputStream(tmp))) {
         out.write(serialized);
       }
-      try {
-        Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE);
-      } catch (IOException e) {
-        tmp.delete();
-        throw e;
-      }
+      Files.move(tmp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE);
     }
     return sha1;
   }
 
-  public String writeBlob(File inputFile) throws IOException {
+  public String writeBlob(File inputFile) throws Exception {
     byte[] header = ("blob " + inputFile.length() + "\0").getBytes(StandardCharsets.UTF_8);
-    MessageDigest digest;
-    try {
-      digest = MessageDigest.getInstance("SHA-1");
-    } catch (NoSuchAlgorithmException e) {
-      throw new RuntimeException(e);
-    }
+    MessageDigest digest = Sha1.createDigest();
 
     File tmp = File.createTempFile("tmp_", "", objectsDir);
     try (DigestOutputStream out = new DigestOutputStream(
@@ -83,11 +72,9 @@ public final class ObjectStore {
 
     String sha1 = Sha1.toHex(digest.digest());
     File dest = getObjectFile(sha1, true);
-    try {
-      if (!dest.exists()) {
-        Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE);
-      }
-    } finally {
+    if (!dest.exists()) {
+      Files.move(tmp.toPath(), dest.toPath(), StandardCopyOption.ATOMIC_MOVE);
+    } else {
       tmp.delete();
     }
     return sha1;
@@ -95,17 +82,12 @@ public final class ObjectStore {
 
   public ObjectData read(String sha1) throws IOException {
     try (ObjectStream s = getObjectStream(sha1)) {
-      if (s.size() > MAX_OBJECT_SIZE) {
-        throw new IOException("Object too large: " + s.size() + " bytes");
-      }
-      ByteArrayOutputStream buf = new ByteArrayOutputStream((int) s.size());
-      byte[] tmp = new byte[4096];
+      int initialSize = (s.size() > 0 && s.size() <= Integer.MAX_VALUE - 8) ? (int) s.size() : 8192;
+      ByteArrayOutputStream buf = new ByteArrayOutputStream(initialSize);
+      byte[] tmp = new byte[BUFFER_SIZE];
       int n;
       while ((n = s.inputStream().read(tmp)) != -1) {
         buf.write(tmp, 0, n);
-      }
-      if (buf.size() != s.size()) {
-        throw new IOException("Malformed object: size mismatch");
       }
       return ObjectData.create(s.type(), buf.toByteArray());
     }
@@ -121,24 +103,20 @@ public final class ObjectStore {
     }
 
     InputStream fileIn = new FileInputStream(file);
-    try {
-      InputStream inflated = new InflaterInputStream(fileIn);
-      ByteArrayOutputStream hdr = new ByteArrayOutputStream();
-      int b;
-      while ((b = inflated.read()) != -1 && b != 0) {
-        hdr.write(b);
-      }
-      String header = hdr.toString(StandardCharsets.UTF_8);
-      int sp = header.indexOf(' ');
-      if (sp == -1) {
-        throw new IOException("Malformed object header: " + header);
-      }
-      return new ObjectStream(
-          header.substring(0, sp), Long.parseLong(header.substring(sp + 1)), inflated);
-    } catch (IOException | NumberFormatException e) {
-      fileIn.close();
-      throw e;
+    InputStream inflated = new InflaterInputStream(new java.io.BufferedInputStream(fileIn, BUFFER_SIZE));
+    ByteArrayOutputStream hdr = new ByteArrayOutputStream();
+    int b;
+    while ((b = inflated.read()) != -1 && b != 0) {
+      hdr.write(b);
     }
+    String header = hdr.toString(StandardCharsets.UTF_8);
+    int sp = header.indexOf(' ');
+    if (sp == -1) {
+      inflated.close();
+      throw new IOException("Malformed object header: " + header);
+    }
+    return new ObjectStream(
+        header.substring(0, sp), Long.parseLong(header.substring(sp + 1)), inflated);
   }
 
   public void readToFile(String sha1, File dest) throws IOException {

@@ -11,13 +11,12 @@ import java.util.Map;
 import june.Helper;
 import june.Index;
 import june.Repository;
-import june.Sha1;
 import june.XDiff;
 
 public final class Diff {
   private Diff() {}
 
-  public static String diff(Repository repo, boolean staged) throws IOException {
+  public static String diff(Repository repo, boolean staged) throws Exception {
     Index index = new Index(repo.getIndexFile());
     StringBuilder output = new StringBuilder();
     if (staged) {
@@ -50,6 +49,12 @@ public final class Diff {
           appendHeader(output, headEntry.getKey(), "deleted file mode " + headEntry.getValue().mode());
           appendLine(output, "--- a/" + headEntry.getKey());
           appendLine(output, "+++ /dev/null");
+          byte[] data = repo.read(headEntry.getValue().sha1()).getData();
+          if (!Helper.isBinary(data)) {
+            for (String line : new String(data, StandardCharsets.UTF_8).split("\n", -1)) {
+              appendLine(output, "-" + line);
+            }
+          }
         }
       }
     } else {
@@ -73,7 +78,7 @@ public final class Diff {
             appendLine(output, "--- a/" + entry.path());
             appendLine(output, "+++ b/" + entry.path());
             byte[] oldBytes = repo.read(entry.sha1()).getData();
-            byte[] newBytes = entry.mode().equals(june.Modes.SYMLINK)
+            byte[] newBytes = Files.isSymbolicLink(targetFile.toPath())
                 ? Files.readSymbolicLink(targetFile.toPath()).toString().getBytes(StandardCharsets.UTF_8)
                 : Files.readAllBytes(targetFile.toPath());
             appendDiff(output, oldBytes, newBytes);

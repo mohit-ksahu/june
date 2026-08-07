@@ -130,7 +130,8 @@ public void updateHeadRefOrCommit(String sha) throws IOException {
 
 - The index file (`.june/index`) collects workspace modifications to prepare them for commits.
 - June uses a simple flat text format instead of a binary cache. This makes the index easy to inspect and debug. Slashes are normalized to `/` to avoid platform incompatibilities, and NUL (`\0`) is used as a delimiter because it is an invalid character in filenames.
-- In `Index.java`, June reads the index file line-by-line and splits each line by the NUL character into exactly 3 parts: hash, mode, and path.
+- In `Index.java`, June reads the index file line-by-line and splits each line by the NUL character into fields (`sha1\0mode\0size\0mtime\0path`), supporting backwards compatibility with legacy 3-field formats (`sha1\0mode\0path`).
+- Storing `size` and `mtime` allows `june status` to perform fast timestamp checks, skipping file re-hashing when files remain unmodified.
 - These are loaded into a `TreeMap` sorted by relative path. This ensures that tree objects built from the index are always serialized in deterministic alphabetical order.
 
 ```java
@@ -139,9 +140,11 @@ public Index(File indexFile) throws IOException {
   if (indexFile.exists()) {
     for (String line : Files.readAllLines(indexFile.toPath(), StandardCharsets.UTF_8)) {
       if (line.isEmpty()) continue;
-      String[] parts = line.split("\0", 3);
-      if (parts.length == 3) {
-        entries.put(parts[2], new Entry(parts[0], parts[1], parts[2]));
+      String[] parts = line.split("\0", 5);
+      if (parts.length == 5) {
+        entries.put(parts[4], new Entry(parts[0], parts[1], parts[4], Long.parseLong(parts[2]), Long.parseLong(parts[3])));
+      } else if (parts.length == 3) {
+        entries.put(parts[2], new Entry(parts[0], parts[1], parts[2], -1, -1));
       }
     }
   }
@@ -174,7 +177,7 @@ public static String get(Repository repo, String key) {
 
 ### Object Storage Layout
 
-Objects live under `.june/objects/`. June partitions objects using a two-character subdirectory prefix based on the object's SHA-1 hash (e.g. hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This partitioning avoids OS filesystem performance issues that occur when a single directory contains too many files. Objects are compressed using zlib (`DeflaterOutputStream` and `InflaterInputStream`) and are capped at 10MB in memory to prevent memory exhaustion.
+Objects live under `.june/objects/`. June partitions objects using a two-character subdirectory prefix based on the object's SHA-1 hash (e.g. hash `a94a8fe5...` is saved at `.june/objects/a9/4a8fe5...`). This partitioning avoids OS filesystem performance issues that occur when a single directory contains too many files. Objects are compressed using zlib (`DeflaterOutputStream` and `InflaterInputStream`) and wrapped with `BufferedInputStream` for optimized stream decompression.
 
 ## 3. Object Hashing and Serialization Formats
 

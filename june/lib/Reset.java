@@ -11,18 +11,12 @@ import june.Repository;
 public final class Reset {
   private Reset() {}
 
-  public static String reset(Repository repo, String target) throws IOException {
-    String sha;
-    if (target == null || target.equalsIgnoreCase("HEAD")) {
-      sha = repo.getHeadCommitSha1();
-      if (sha == null) {
-        throw new OperationException("HEAD is empty; nothing to reset to");
-      }
-    } else {
-      sha = Helper.resolveShortSha1(repo.getRepoDir(), target);
-      if (sha == null) {
-        throw new OperationException("commit '" + target + "' not found");
-      }
+  public static String reset(Repository repo, String target) throws Exception {
+    String sha = repo.resolveRef(target == null ? "HEAD" : target);
+    if (sha == null) {
+      throw new OperationException(target == null || target.equalsIgnoreCase("HEAD")
+          ? "HEAD is empty; nothing to reset to"
+          : "commit '" + target + "' not found");
     }
     Commit commit = repo.readCommit(sha);
     Map<String, Helper.FileInfo> files = new HashMap<>();

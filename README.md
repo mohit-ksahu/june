@@ -11,10 +11,10 @@ June supports a standard subset of operations:
 - **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
 - **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
 - **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
-- **Branches and Tags**: Create, list, and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
+- **Branches and Tags**: Create, list, rename (`-m` / `mv`), and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
 - **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
 - **State Restoration**: Unstage changes or discard modifications in the working directory.
-- **Myers Diff**: Generate unified line-by-line diffs with contextual layout lines.
+- **Myers Diff**: Full-File Diff Viewer mode with optimized memory slicing for unified line-by-line diffs.
 - **Refactoring Sync**: Rename/move files or untrack them from the database.
 - **Log Traversal**: Print chronological commit histories in standard or single-line formats.
 - **Fast-forward Merges**: Merge branch histories without generating merge commits.
@@ -191,6 +191,14 @@ java -cp out App branch
 # Create a new branch pointing to the current commit
 java -cp out App branch feature-auth
 
+# Rename active branch to master
+java -cp out App branch -m master
+# Or using the mv subcommand:
+java -cp out App branch mv master
+
+# Rename specific branch
+java -cp out App branch -m old-name new-name
+
 # Delete a branch (checks for unmerged history)
 java -cp out App branch -d feature-auth
 
@@ -306,3 +314,7 @@ Hard reset the working directory, staging index, and active branch references to
 ```bash
 java -cp out App reset --hard a94a8f
 ```
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

@@ -4,7 +4,7 @@ import june.OperationException;
 import june.Repository;
 
 public final class Add {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     if (args.length == 0) {
       throw new OperationException("nothing specified, nothing added");
     }

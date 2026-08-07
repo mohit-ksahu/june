@@ -19,7 +19,7 @@ public final class App {
       }
       if (!repo.exists()) {
         throw new OperationException(
-            "fatal: not a june repository (or any of the parent directories): "
+            "not a june repository (or any of the parent directories): "
                 + Repository.REPO_DIR);
       }
       switch (command) {
@@ -85,8 +85,8 @@ public final class App {
                       usage: june status
 
         grow, mark and tweak your common history
-           branch     List, create, or delete branches
-                      usage: june branch [-d | -D] [<branch-name>]
+           branch     List, create, rename, or delete branches
+                      usage: june branch [-d | -D | -m | mv] [<branch-name>]
            checkout   Switch branches or restore working tree files
                       usage: june checkout <branch-name> | <commit>
            commit     Record changes to the repository

@@ -47,16 +47,16 @@ public final class Branch {
   public static String delete(Repository repo, String name, boolean force) throws IOException {
     if (name.equals(repo.getCurrentBranch())) {
       throw new OperationException(
-          "error: Cannot delete branch '" + name + "' which you are currently on.");
+          "Cannot delete branch '" + name + "' which you are currently on.");
     }
     String sha = repo.readBranchRef(name);
     if (sha == null) {
-      throw new OperationException("error: branch '" + name + "' not found.");
+      throw new OperationException("branch '" + name + "' not found.");
     }
     if (!force) {
       String headSha = repo.getHeadCommitSha1();
       if (!Helper.isAncestor(repo, sha, headSha)) {
-        throw new OperationException("error: The branch '" + name + "' is not fully merged.\n"
+        throw new OperationException("The branch '" + name + "' is not fully merged.\n"
             + "If you are sure you want to delete it, run 'june branch -D " + name + "'.");
       }
     }
@@ -65,18 +65,26 @@ public final class Branch {
   }
 
   public static String rename(Repository repo, String oldName, String newName) throws IOException {
-    if (!repo.branchExists(oldName)) {
-      throw new OperationException("error: branch '" + oldName + "' not found.");
+    if (oldName == null) {
+      oldName = repo.getCurrentBranch();
+      if (oldName == null) {
+        throw new OperationException("Cannot rename detached HEAD.");
+      }
     }
-    if (repo.branchExists(newName)) {
+    if (!repo.branchExists(oldName)) {
+      throw new OperationException("branch '" + oldName + "' not found.");
+    }
+    if (repo.branchExists(newName) && !oldName.equals(newName)) {
       throw new OperationException("branch '" + newName + "' already exists.");
     }
     String sha = repo.readBranchRef(oldName);
     repo.updateBranchRef(newName, sha);
-    repo.deleteBranchRef(oldName);
+    if (!oldName.equals(newName)) {
+      repo.deleteBranchRef(oldName);
+    }
     if (oldName.equals(repo.getCurrentBranch())) {
       repo.setHeadTarget(Repository.HEADS_REF_PREFIX + newName);
     }
-    return "Renamed " + oldName + " to " + newName;
+    return "Renamed branch '" + oldName + "' to '" + newName + "'";
   }
 }

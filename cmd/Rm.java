@@ -4,7 +4,7 @@ import java.util.List;
 import june.Repository;
 
 public final class Rm {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     boolean cached = false;
     List<String> paths = new ArrayList<>();
     for (String arg : args) {

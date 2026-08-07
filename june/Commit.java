@@ -50,7 +50,7 @@ public class Commit extends ObjectData {
     }
 
     if (tree == null || auth == null) {
-      throw new OperationException("fatal: malformed commit object");
+      throw new OperationException("malformed commit object");
     }
     this.treeSha1 = tree;
     this.parentSha1s = parents;

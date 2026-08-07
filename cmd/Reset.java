@@ -2,7 +2,7 @@ import java.io.IOException;
 import june.Repository;
 
 public final class Reset {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     String target = null;
     for (String arg : args) {
       if (!arg.equals("--hard")) {

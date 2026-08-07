@@ -14,9 +14,9 @@ import june.Repository;
 public final class Add {
   private Add() {}
 
-  public static void add(Repository repo, List<String> paths) throws IOException {
+  public static void add(Repository repo, List<String> paths) throws Exception {
     Index index = new Index(repo.getIndexFile());
-    var ignorePatterns = IgnoreRules.load(repo.getRootDir());
+    var rules = IgnoreRules.loadRules(repo.getRootDir());
     for (String rawPath : paths) {
       String relPath = repo.getRelativePath(rawPath);
       File target = new File(repo.getRootDir(), relPath);
@@ -30,14 +30,14 @@ public final class Add {
       } else {
         List<File> files = new ArrayList<>();
         if (target.isDirectory()) {
-          Helper.collectWorkspaceFiles(target, repo.getRootDir(), files, ignorePatterns);
-        } else if (!IgnoreRules.isIgnored(relPath, ignorePatterns)) {
+          Helper.collectWorkspaceFiles(target, repo.getRootDir(), files, rules);
+        } else if (!IgnoreRules.isIgnoredRules(relPath, rules)) {
           files.add(target);
         }
         for (File file : files) {
           String rel = repo.getRootDir().toPath().relativize(file.toPath()).toString().replace('\\', '/');
           String mode = Helper.entryMode(file);
-          index.add(repo.writeFileOrSymlinkTarget(file, mode), mode, rel);
+          index.add(repo.writeFileOrSymlinkTarget(file, mode), mode, rel, file.length(), Helper.fileModifiedTime(file));
         }
       }
     }

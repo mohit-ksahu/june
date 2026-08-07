@@ -10,7 +10,7 @@ public final class Status {
   private static final String ANSI_GREEN = "\u001B[32m";
   private static final String ANSI_RED = "\u001B[31m";
 
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     formatStatus(repo.status());
   }
 

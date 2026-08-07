@@ -14,7 +14,7 @@ import june.Repository;
 public final class Checkout {
   private Checkout() {}
 
-  public static String checkout(Repository repo, String target) throws IOException {
+  public static String checkout(Repository repo, String target) throws Exception {
     String commitSha;
     boolean isBranch = false;
     String branchRef = null;
@@ -24,16 +24,10 @@ public final class Checkout {
       isBranch = true;
       branchRef = Repository.HEADS_REF_PREFIX + target;
       commitSha = Files.readString(branchFile.toPath()).trim();
-    } else if (tagFile.exists()) {
-      commitSha = Files.readString(tagFile.toPath()).trim();
     } else {
-      if (target.length() < 4 || target.length() > 40) {
-        throw new OperationException("error: pathspec '" + target
-            + "' did not match any file(s) known to june");
-      }
-      commitSha = Helper.resolveShortSha1(repo.getRepoDir(), target);
+      commitSha = repo.resolveRef(target);
       if (commitSha == null) {
-        throw new OperationException("error: pathspec '" + target
+        throw new OperationException("pathspec '" + target
             + "' did not match any file(s) known to june");
       }
       if (!(repo.read(commitSha) instanceof Commit)) {

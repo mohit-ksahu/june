@@ -25,10 +25,10 @@ public final class Status {
 
   private Status() {}
 
-  public static StatusResult status(Repository repo) throws IOException {
+  public static StatusResult status(Repository repo) throws Exception {
     Index index = new Index(repo.getIndexFile());
     File rootDir = repo.getRootDir();
-    var ignorePatterns = IgnoreRules.load(rootDir);
+    var rules = IgnoreRules.loadRules(rootDir);
 
     Map<String, Helper.FileInfo> headFiles = new HashMap<>();
     String headSha = repo.getHeadCommitSha1();
@@ -38,7 +38,7 @@ public final class Status {
     }
 
     List<File> workspaceFilesList = new ArrayList<>();
-    Helper.collectWorkspaceFiles(rootDir, rootDir, workspaceFilesList, ignorePatterns);
+    Helper.collectWorkspaceFiles(rootDir, rootDir, workspaceFilesList, rules);
     Map<String, File> workspaceFilesMap = new HashMap<>();
     for (File file : workspaceFilesList) {
       workspaceFilesMap.put(
@@ -70,8 +70,14 @@ public final class Status {
       } else {
         File wf = workspaceEntry.getValue();
         String currentMode = Helper.entryMode(wf);
-        String currentSha = Helper.entrySha1(wf, currentMode);
-        if (!currentSha.equals(indexEntry.sha1()) || !currentMode.equals(indexEntry.mode())) {
+        boolean modified;
+        if (indexEntry.size() >= 0 && indexEntry.mtime() >= 0 && wf.length() == indexEntry.size() && Helper.fileModifiedTime(wf) == indexEntry.mtime()) {
+          modified = !currentMode.equals(indexEntry.mode());
+        } else {
+          String currentSha = Helper.entrySha1(wf, currentMode);
+          modified = !currentSha.equals(indexEntry.sha1()) || !currentMode.equals(indexEntry.mode());
+        }
+        if (modified) {
           unstaged.add(new FileChange(workspaceEntry.getKey(), ChangeType.MODIFIED));
         }
       }

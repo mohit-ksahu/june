@@ -1,8 +1,6 @@
 package june.lib;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
 import june.Commit;
@@ -14,7 +12,7 @@ import june.Repository;
 public final class Merge {
   private Merge() {}
 
-  public static String merge(Repository repo, String target) throws IOException {
+  public static String merge(Repository repo, String target) throws Exception {
     if (target.isEmpty()) {
       throw new OperationException(
           "merge requires a branch name, tag, or commit hash to merge");
@@ -23,18 +21,9 @@ public final class Merge {
     if (currentSha == null) {
       throw new OperationException("HEAD is empty; cannot merge into an empty branch");
     }
-    String targetSha;
-    File branchFile = repo.branchRefFile(target);
-    File tagFile = repo.tagRefFile(target);
-    if (branchFile.exists()) {
-      targetSha = Files.readString(branchFile.toPath()).trim();
-    } else if (tagFile.exists()) {
-      targetSha = Files.readString(tagFile.toPath()).trim();
-    } else {
-      targetSha = Helper.resolveShortSha1(repo.getRepoDir(), target);
-      if (targetSha == null) {
-        throw new OperationException("target '" + target + "' not found");
-      }
+    String targetSha = repo.resolveRef(target);
+    if (targetSha == null) {
+      throw new OperationException("target '" + target + "' not found");
     }
     if (!(repo.read(targetSha) instanceof Commit)) {
       throw new OperationException("object " + targetSha + " is not a commit");

@@ -118,10 +118,10 @@ private static void formatStatus(june.lib.Status.StatusResult sr) {
 
 ### 5. `branch`
 
-* **Syntax**: `june branch [-d | -D] [<branch-name>]`
+* **Syntax**: `june branch [-d | -D | -m | mv] [<branch-name>] [<new-branch-name>]`
 - Branches allow users to manage independent lines of development.
-- The command supports listing active branches, creating branch pointers at the current commit, or deleting branches.
-- In `june.cmd.Branch`, June parses delete flags (`-d` or `-D`) to call branch deletion routines, or routes to the branch creation logic if a raw name is specified.
+- The command supports listing active branches, creating branch pointers at the current commit, deleting branches, or renaming branches (`-m`, `-M`, `mv`, `rename`).
+- In `june.cmd.Branch`, June parses delete flags (`-d` or `-D`) for deletion, rename options (`-m` or `mv`) for branch renaming, or routes to branch creation if a raw name is specified.
 
 ### 6. `checkout`
 
