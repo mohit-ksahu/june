@@ -32,7 +32,7 @@ public final class Helper {
     }
   }
 
-  public static String writeTree(TreeNode node, Repository repo) throws IOException {
+  public static String writeTree(TreeNode node, Repository repo) throws Exception {
     if (!node.mode.equals(Modes.TREE)) {
       return node.sha1;
     }
@@ -57,8 +57,12 @@ public final class Helper {
     }
   }
 
+  public static long fileModifiedTime(File file) {
+    return (file != null && file.exists()) ? file.lastModified() : -1;
+  }
+
   public static void syncWorkingTreeFromCommit(
-      Repository repo, Map<String, FileInfo> targetFiles) throws IOException {
+      Repository repo, Map<String, FileInfo> targetFiles) throws Exception {
     File rootDir = repo.getRootDir();
     Index index = new Index(repo.getIndexFile());
 
@@ -116,14 +120,17 @@ public final class Helper {
 
     index.clear();
     for (var entry : targetFiles.entrySet()) {
-      index.add(entry.getValue().sha1(), entry.getValue().mode(), entry.getKey());
+      File dest = new File(rootDir, entry.getKey());
+      long size = dest.exists() ? dest.length() : -1;
+      long mtime = fileModifiedTime(dest);
+      index.add(entry.getValue().sha1(), entry.getValue().mode(), entry.getKey(), size, mtime);
     }
     index.write();
   }
 
   public static void checkConflicts(
       Repository repo, Map<String, FileInfo> targetFiles, Index index, String operation)
-      throws IOException {
+      throws Exception {
     File rootDir = repo.getRootDir();
     List<String> local = new ArrayList<>();
     List<String> untracked = new ArrayList<>();
@@ -188,21 +195,17 @@ public final class Helper {
     return file.canExecute() ? Modes.EXECUTABLE : Modes.FILE;
   }
 
-  public static String entrySha1(File file, String mode) {
-    try {
-      if (mode.equals(Modes.SYMLINK) || Files.isSymbolicLink(file.toPath())) {
-        return Sha1.objectId(
-            ObjectTypes.BLOB,
-            Files.readSymbolicLink(file.toPath()).toString().getBytes(StandardCharsets.UTF_8));
-      }
-    } catch (IOException e) {
-      throw new RuntimeException(e);
+  public static String entrySha1(File file, String mode) throws Exception {
+    if (mode.equals(Modes.SYMLINK) || Files.isSymbolicLink(file.toPath())) {
+      return Sha1.objectId(
+          ObjectTypes.BLOB,
+          Files.readSymbolicLink(file.toPath()).toString().getBytes(StandardCharsets.UTF_8));
     }
     return Sha1.hash(file);
   }
 
   public static void collectWorkspaceFiles(
-      File dir, File rootDir, List<File> out, List<String> ignorePatterns) {
+      File dir, File rootDir, List<File> out, List<IgnoreRules.Rule> rules) {
     File[] files = dir.listFiles();
     if (files == null) {
       return;
@@ -212,11 +215,11 @@ public final class Helper {
         continue;
       }
       String rel = rootDir.toPath().relativize(file.toPath()).toString().replace('\\', '/');
-      if (IgnoreRules.isIgnored(rel, ignorePatterns)) {
+      if (IgnoreRules.isIgnoredRules(rel, rules)) {
         continue;
       }
       if (file.isDirectory() && !Files.isSymbolicLink(file.toPath())) {
-        collectWorkspaceFiles(file, rootDir, out, ignorePatterns);
+        collectWorkspaceFiles(file, rootDir, out, rules);
       } else {
         out.add(file);
       }
@@ -248,7 +251,7 @@ public final class Helper {
       return shortSha1;
     }
     if (shortSha1.length() < 4) {
-      throw new OperationException("error: short SHA-1 must be at least 4 characters");
+      throw new OperationException("short SHA-1 must be at least 4 characters");
     }
     File subDir = new File(new File(repoDir, ObjectStore.OBJECTS_DIR_NAME), shortSha1.substring(0, 2));
     if (!subDir.isDirectory()) {
@@ -260,7 +263,7 @@ public final class Helper {
       return null;
     }
     if (matches.length > 1) {
-      throw new OperationException("error: short SHA-1 " + shortSha1 + " is ambiguous");
+      throw new OperationException("short SHA-1 " + shortSha1 + " is ambiguous");
     }
     return shortSha1.substring(0, 2) + matches[0].getName();
   }

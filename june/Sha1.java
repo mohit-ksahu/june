@@ -11,17 +11,17 @@ import java.security.NoSuchAlgorithmException;
 public final class Sha1 {
   private Sha1() {}
 
-  public static String hash(byte[] data) {
-    try {
-      return toHex(MessageDigest.getInstance("SHA-1").digest(data));
-    } catch (NoSuchAlgorithmException e) {
-      throw new RuntimeException("SHA-1 not available", e);
-    }
+  public static MessageDigest createDigest() throws Exception {
+    return MessageDigest.getInstance("SHA-1");
   }
 
-  public static String hash(File file) {
+  public static String hash(byte[] data) throws Exception {
+    return toHex(createDigest().digest(data));
+  }
+
+  public static String hash(File file) throws Exception {
     try (InputStream is = new FileInputStream(file)) {
-      MessageDigest digest = MessageDigest.getInstance("SHA-1");
+      MessageDigest digest = createDigest();
       digest.update(("blob " + file.length() + "\0").getBytes(StandardCharsets.UTF_8));
       byte[] buf = new byte[8192];
       int n;
@@ -29,20 +29,14 @@ public final class Sha1 {
         digest.update(buf, 0, n);
       }
       return toHex(digest.digest());
-    } catch (IOException | NoSuchAlgorithmException e) {
-      throw new RuntimeException(e);
     }
   }
 
-  public static String objectId(String type, byte[] data) {
-    try {
-      MessageDigest digest = MessageDigest.getInstance("SHA-1");
-      digest.update((type + " " + data.length + "\0").getBytes(StandardCharsets.UTF_8));
-      digest.update(data);
-      return toHex(digest.digest());
-    } catch (NoSuchAlgorithmException e) {
-      throw new RuntimeException("SHA-1 not available", e);
-    }
+  public static String objectId(String type, byte[] data) throws Exception {
+    MessageDigest digest = createDigest();
+    digest.update((type + " " + data.length + "\0").getBytes(StandardCharsets.UTF_8));
+    digest.update(data);
+    return toHex(digest.digest());
   }
 
   public static String toHex(byte[] bytes) {

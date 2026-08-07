@@ -9,7 +9,7 @@ public final class Log {
   private static final String ANSI_RESET = "\u001B[0m";
   private static final String ANSI_YELLOW = "\u001B[33m";
 
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     boolean oneline = false;
     for (String arg : args) {
       if (arg.equals("--oneline")) {
@@ -26,12 +26,15 @@ public final class Log {
 
   private static int parseMaxCount(String[] args) {
     for (int i = 0; i < args.length; i++) {
-      if ((args[i].equals("-n") || args[i].equals("--max-count")) && i + 1 < args.length) {
-        try {
-          return Integer.parseInt(args[++i]);
-        } catch (NumberFormatException e) {
-          throw new OperationException("fatal: invalid argument for -n: " + args[i]);
+      if (args[i].equals("-n") || args[i].equals("--max-count")) {
+        if (i + 1 >= args.length) {
+          throw new OperationException("option '" + args[i] + "' requires a value");
         }
+        String val = args[i + 1];
+        if (!val.matches("\\d+")) {
+          throw new OperationException("invalid argument for " + args[i] + ": " + val);
+        }
+        return Integer.parseInt(val);
       }
     }
     return Integer.MAX_VALUE;

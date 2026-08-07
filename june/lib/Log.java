@@ -26,11 +26,10 @@ public final class Log {
   private Log() {}
 
   private static long parseTimestamp(String authorLine) {
-    try {
-      int last = authorLine.lastIndexOf(' ');
-      int second = authorLine.lastIndexOf(' ', last - 1);
-      if (last != -1 && second != -1) return Long.parseLong(authorLine.substring(second + 1, last));
-    } catch (Exception ignored) {}
+    String[] parts = authorLine.split(" ");
+    if (parts.length >= 2 && parts[parts.length - 2].matches("\\d+")) {
+      return Long.parseLong(parts[parts.length - 2]);
+    }
     return 0;
   }
 
@@ -69,9 +68,10 @@ public final class Log {
       long epoch = timestamps.get(sha);
       String dateStr = epoch == 0 ? "" :
           ZonedDateTime.ofInstant(Instant.ofEpochSecond(epoch), ZoneId.systemDefault()).format(DATE_FMT);
-      int last = authorLine.lastIndexOf(' ');
-      int second = epoch == 0 ? -1 : authorLine.lastIndexOf(' ', last - 1);
-      String author = second != -1 ? authorLine.substring(0, second) : authorLine;
+      String[] parts = authorLine.split(" ");
+      String author = (parts.length >= 3 && epoch != 0)
+          ? String.join(" ", java.util.Arrays.copyOf(parts, parts.length - 2))
+          : authorLine;
       entries.add(new LogEntry(sha, author, dateStr, c.getMessage(), c.getParentSha1s()));
     }
     return entries;

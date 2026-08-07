@@ -59,7 +59,10 @@ public class XDiff {
           break;
         }
       }
-      history.add(v.clone());
+      int sliceLen = 2 * d + 1;
+      int[] slice = new int[sliceLen];
+      System.arraycopy(v, max - d, slice, 0, sliceLen);
+      history.add(slice);
       if (found) {
         break;
       }
@@ -71,12 +74,15 @@ public class XDiff {
 
     for (int step = d; step >= 1; step--) {
       int k = x - y;
-      int[] vPrev = history.get(step - 1);
-      boolean down =
-          (k == -step || (k != step && vPrev[max + k - 1] < vPrev[max + k + 1]));
+      int prevD = step - 1;
+      int[] vPrevSlice = history.get(prevD);
+      int offset = max - prevD;
+      int kMinus1Val = (max + k - 1 - offset >= 0 && max + k - 1 - offset < vPrevSlice.length) ? vPrevSlice[max + k - 1 - offset] : -1;
+      int kPlus1Val = (max + k + 1 - offset >= 0 && max + k + 1 - offset < vPrevSlice.length) ? vPrevSlice[max + k + 1 - offset] : -1;
+      boolean down = (k == -step || (k != step && kMinus1Val < kPlus1Val));
       int kPrev = down ? k + 1 : k - 1;
 
-      int xPrev = vPrev[max + kPrev];
+      int xPrev = vPrevSlice[max + kPrev - offset];
       int xTrans = down ? xPrev : xPrev + 1;
 
       while (x > xTrans) {

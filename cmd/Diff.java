@@ -4,7 +4,7 @@ import java.util.List;
 import june.Repository;
 
 public final class Diff {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     boolean staged = false;
     for (String arg : args) {
       if (arg.equals("--cached") || arg.equals("--staged")) {
@@ -63,58 +63,30 @@ public final class Diff {
   private static void flushFileDiff(StringBuilder sb, List<String> header, List<String> lines) {
     if (header.isEmpty()) return;
 
-    boolean hasChanges = false;
-    int size = lines.size();
-    boolean[] keep = new boolean[size];
-
-    for (int index = 0; index < size; index++) {
-      String text = lines.get(index);
-      if (text.startsWith("-") || text.startsWith("+")) {
-        hasChanges = true;
-        for (int subIndex = Math.max(0, index - 3); subIndex <= Math.min(size - 1, index + 3); subIndex++) {
-          keep[subIndex] = true;
-        }
-      }
-    }
-
-    if (!hasChanges || size == 0) {
-      for (String h : header) {
-        appendColorLine(sb, h);
-      }
-      return;
-    }
-
     for (String h : header) {
       appendColorLine(sb, h);
     }
+    if (lines.isEmpty()) {
+      return;
+    }
 
-    int line = 1, newLine = 1, index = 0;
-    while (index < size) {
-      String text = lines.get(index);
-
-      if (!keep[index]) {
-        if (text.startsWith("-")) line++;
-        else if (text.startsWith("+")) newLine++;
-        else { line++; newLine++; }
-        index++;
-        continue;
+    int countOld = 0, countNew = 0;
+    for (String line : lines) {
+      if (line.startsWith("-")) {
+        countOld++;
+      } else if (line.startsWith("+")) {
+        countNew++;
+      } else {
+        countOld++;
+        countNew++;
       }
+    }
 
-      int startIndex = index, start = line, newStart = newLine, count = 0, newCount = 0;
-      while (index < size && keep[index]) {
-        String innerText = lines.get(index);
-        if (innerText.startsWith("-")) { count++; line++; }
-        else if (innerText.startsWith("+")) { newCount++; newLine++; }
-        else { count++; newCount++; line++; newLine++; }
-        index++;
-      }
+    String hunkHeader = "@@ -1," + countOld + " +1," + countNew + " @@";
+    appendColorLine(sb, hunkHeader);
 
-      String hunkHeader = "@@ -" + start + "," + count + " +" + newStart + "," + newCount + " @@";
-      appendColorLine(sb, hunkHeader);
-
-      for (int subIndex = startIndex; subIndex < index; subIndex++) {
-        appendColorLine(sb, lines.get(subIndex));
-      }
+    for (String line : lines) {
+      appendColorLine(sb, line);
     }
   }
 }

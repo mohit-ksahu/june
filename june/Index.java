@@ -10,7 +10,11 @@ import java.util.List;
 import java.util.TreeMap;
 
 public class Index {
-  public record Entry(String sha1, String mode, String path) {}
+  public record Entry(String sha1, String mode, String path, long size, long mtime) {
+    public Entry(String sha1, String mode, String path) {
+      this(sha1, mode, path, -1L, -1L);
+    }
+  }
 
   private static final String FIELD_SEP = "\0";
   private static final String LINE_SEP = "\n";
@@ -25,24 +29,33 @@ public class Index {
         if (line.isEmpty()) {
           continue;
         }
-        String[] parts = line.split(FIELD_SEP, 3);
+        String[] parts = line.split(FIELD_SEP, 5);
         if (parts.length == 3) {
           validatePath(parts[2]);
           entries.put(parts[2], new Entry(parts[0], parts[1], parts[2]));
+        } else if (parts.length == 5) {
+          validatePath(parts[4]);
+          long sz = parts[2].matches("-?\\d+") ? Long.parseLong(parts[2]) : -1L;
+          long mt = parts[3].matches("-?\\d+") ? Long.parseLong(parts[3]) : -1L;
+          entries.put(parts[4], new Entry(parts[0], parts[1], parts[4], sz, mt));
         }
       }
     }
   }
 
   public void add(String sha1, String mode, String path) {
+    add(sha1, mode, path, -1L, -1L);
+  }
+
+  public void add(String sha1, String mode, String path, long size, long mtime) {
     validatePath(path);
-    entries.put(path, new Entry(sha1, mode, path));
+    entries.put(path, new Entry(sha1, mode, path, size, mtime));
   }
 
   private static void validatePath(String path) {
     if (path == null || path.indexOf('\0') != -1 || path.indexOf('\n') != -1
         || path.indexOf('\r') != -1) {
-      throw new OperationException("fatal: index paths cannot contain NUL or newline");
+      throw new OperationException("index paths cannot contain NUL or newline");
     }
   }
 
@@ -65,19 +78,16 @@ public class Index {
   public void write() throws IOException {
     File lock = new File(indexFile.getParentFile(), "index.lock");
     FileLock.acquireOrBreak(lock);
-    try {
-      StringBuilder sb = new StringBuilder();
-      for (Entry e : entries.values()) {
-        sb.append(e.sha1()).append(FIELD_SEP)
-          .append(e.mode()).append(FIELD_SEP)
-          .append(e.path()).append(LINE_SEP);
-      }
-      Files.writeString(lock.toPath(), sb.toString(), StandardCharsets.UTF_8);
-      Files.move(lock.toPath(), indexFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
-    } catch (IOException e) {
-      lock.delete();
-      throw e;
+    StringBuilder sb = new StringBuilder();
+    for (Entry e : entries.values()) {
+      sb.append(e.sha1()).append(FIELD_SEP)
+        .append(e.mode()).append(FIELD_SEP)
+        .append(e.size()).append(FIELD_SEP)
+        .append(e.mtime()).append(FIELD_SEP)
+        .append(e.path()).append(LINE_SEP);
     }
+    Files.writeString(lock.toPath(), sb.toString(), StandardCharsets.UTF_8);
+    Files.move(lock.toPath(), indexFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
   }
 }
 
@@ -107,12 +117,7 @@ final class FileLock {
   }
 
   private static boolean isStale(File lock) {
-    try {
-      java.nio.file.attribute.BasicFileAttributes attrs =
-          Files.readAttributes(lock.toPath(), java.nio.file.attribute.BasicFileAttributes.class);
-      return System.currentTimeMillis() - attrs.lastModifiedTime().toMillis() > STALE_LOCK_MILLIS;
-    } catch (IOException e) {
-      return false;
-    }
+    long mtime = Helper.fileModifiedTime(lock);
+    return mtime > 0 && (System.currentTimeMillis() - mtime > STALE_LOCK_MILLIS);
   }
 }

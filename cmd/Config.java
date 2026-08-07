@@ -3,14 +3,14 @@ import june.OperationException;
 import june.Repository;
 
 public final class Config {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     String result = runConfigCommand(repo, args);
     if (!result.isEmpty()) {
       System.out.println(result);
     }
   }
 
-  private static String runConfigCommand(Repository repo, String[] args) throws IOException {
+  private static String runConfigCommand(Repository repo, String[] args) throws Exception {
     if (args.length == 0) {
       throw new OperationException("usage: june config <key> [<value>]");
     }

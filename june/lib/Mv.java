@@ -14,7 +14,7 @@ public final class Mv {
   private Mv() {}
 
   public static String mv(Repository repo, String sourcePath, String destinationPath)
-      throws IOException {
+      throws Exception {
     Index index = new Index(repo.getIndexFile());
     String relSource = repo.getRelativePath(sourcePath);
     if (index.getEntry(relSource) == null) {
@@ -41,7 +41,7 @@ public final class Mv {
         String mode = Helper.entryMode(destinationFile);
         String sha = Helper.entrySha1(destinationFile, mode);
         if (!sha.equals(destEntry.sha1())) {
-          throw new OperationException("error: destination '" + relDest
+          throw new OperationException("destination '" + relDest
               + "' has uncommitted local changes; commit or restore it first.");
         }
       }

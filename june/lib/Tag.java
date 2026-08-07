@@ -8,13 +8,14 @@ import june.OperationException;
 public final class Tag {
   private Tag() {}
 
-  public static List<String> list(Repository repo) {
+  public static List<String> list(Repository repo) throws IOException {
     return repo.getTags();
   }
 
-  public static void create(Repository repo, String name, String sha) throws IOException {
-    if (repo.tagExists(name)) {
-      throw new OperationException("tag '" + name + "' already exists");
+  public static void create(Repository repo, String name, String targetRef) throws IOException {
+    String sha = repo.resolveRef(targetRef != null ? targetRef : "HEAD");
+    if (sha == null) {
+      throw new OperationException("Failed to resolve '" + targetRef + "' as a valid ref.");
     }
     repo.createTag(name, sha);
   }

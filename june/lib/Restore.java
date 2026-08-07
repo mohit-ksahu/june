@@ -36,7 +36,10 @@ public final class Restore {
       for (String path : expanded) {
         Helper.FileInfo headFile = headFiles.get(path);
         if (headFile != null) {
-          index.add(headFile.sha1(), headFile.mode(), path);
+          File f = new File(repo.getRootDir(), path);
+          long size = f.exists() ? f.length() : -1;
+          long mtime = Helper.fileModifiedTime(f);
+          index.add(headFile.sha1(), headFile.mode(), path, size, mtime);
           appendLine(result, "Unstaged changes for '" + path + "'");
         } else if (index.remove(path)) {
           appendLine(result, "Unstaged new file '" + path + "'");
@@ -51,7 +54,7 @@ public final class Restore {
         Index.Entry entry = index.getEntry(path);
         if (entry == null) {
           throw new OperationException(
-              "error: pathspec '" + path + "' did not match any file(s) known to june");
+              "pathspec '" + path + "' did not match any file(s) known to june");
         }
         File dest = new File(repo.getRootDir(), path);
 

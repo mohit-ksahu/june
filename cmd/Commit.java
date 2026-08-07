@@ -3,7 +3,7 @@ import june.OperationException;
 import june.Repository;
 
 public final class Commit {
-  public static void run(Repository repo, String[] args) throws IOException {
+  public static void run(Repository repo, String[] args) throws Exception {
     String msg = null;
     boolean auto = false;
     for (int i = 0; i < args.length; i++) {
@@ -21,7 +21,7 @@ public final class Commit {
       }
     }
     if (msg == null) {
-      throw new OperationException("fatal: no commit message specified (use -m \"message\")");
+      throw new OperationException("no commit message specified (use -m \"message\")");
     }
     String result = repo.commit(msg, auto).message();
     if (!result.isEmpty()) {
