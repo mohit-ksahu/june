@@ -1,4 +1,4 @@
-<h1 align="center">June</h1>
+# June
 
 June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
 
