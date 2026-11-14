@@ -1,320 +1,176 @@
 # June
 
-June is a Java-based version control system implemented with the JDK. It implements a compact, serverless model to manage file snapshots, staging databases, reference graphs, and commit histories.
+June is a version control system written in pure Java (JDK 21) with zero third-party dependencies. It works directly with files on disk, implementing version control concepts like content-addressable storage, snapshot staging, Merkle trees, and commit histories.
 
-The implementation separates the command-line adapter layer from reusable repository and feature logic, making the codebase clean, modular, and easy to extend.
+## Features
 
-## Capabilities
+- **Set up repositories**: Creates the `.june/` directory and configures your initial `HEAD`.
+- **Stage files**: Tracks files, directories, symlinks, and deletions in a clean, sorted index.
+- **Save commits**: Records snapshots with author names, emails, timestamps, and messages.
+- **Check status**: Quickly scans your workspace for modified, deleted, and untracked files using cached file sizes and edit times.
+- **Work with branches and tags**: Create, list, rename (`-m`), and delete branches and tags, including nested paths like `feature/login`.
+- **Checkout versions**: Switch between branches or inspect specific commits and tags safely without overwriting uncommitted work.
+- **Restore files**: Discard unwanted workspace edits or unstage files from the index.
+- **View diffs**: Review line-by-line differences with clean ANSI colored output.
+- **Rename and remove files**: Move files (`mv`) and stop tracking paths (`rm`).
+- **Read history**: Browse commit history in standard or single-line (`--oneline`) format.
+- **Merge histories**: Fast-forward active branches when changes line up directly.
+- **Hard reset**: Point your workspace and index directly to any commit hash.
+- **Ignore files**: Keep build folders and temp files out of your repository with `.juneignore`.
+- **Lock files safely**: Uses atomic file locks to prevent concurrent writes from corrupting data.
 
-June supports a standard subset of operations:
-- **Repository Setup**: Initialize database directories (`.june/`) and configure default refs.
-- **Staging Index**: Track files, symlinks, and directories recursively, capture file deletions, and maintain an alphabetically sorted stage.
-- **Commit Snapshots**: Create commit snapshots with author signatures, timestamps, and commit messages.
-- **Status Checks**: Scan the workspace and compare it with the staging index and HEAD commit to display modified, deleted, and untracked files.
-- **Branches and Tags**: Create, list, rename (`-m` / `mv`), and delete branch pointers and tags. Full support for nested reference paths (e.g., `feature/login`).
-- **Checkout Operations**: Switch workspace states to target branches, tags, or raw commit hashes.
-- **State Restoration**: Unstage changes or discard modifications in the working directory.
-- **Myers Diff**: Full-File Diff Viewer mode with optimized memory slicing for unified line-by-line diffs.
-- **Refactoring Sync**: Rename/move files or untrack them from the database.
-- **Log Traversal**: Print chronological commit histories in standard or single-line formats.
-- **Fast-forward Merges**: Merge branch histories without generating merge commits.
-- **Hard Resets**: Align the working directory and staging index directly with a target commit.
-- **Ignore Rules**: Exclude build outputs and temporary files using `.juneignore` matching.
-- **Atomic Locks**: Protect index updates with file locks to avoid write conflicts.
+## Codebase Layout
 
-## Codebase Structure
+- **`june/`**: The core version control engine. A single flat package where `Repository` acts as the unified facade providing both direct workflow operations and storage primitives.
+- **`cmd/`**: The command-line interface. Parses arguments, handles user options, and formats terminal output.
 
-The code is organized into two distinct directories:
-1. **`june/`**: Contains the reusable base library under package `june` and package `june.lib`. This manages underlying operations (Repository, ObjectStore, Index, Diff) and the main logical workflows. See the [June Architecture & Specification](june/README.md) for more details.
-2. **`cmd/`**: Contains the CLI wrapper under the default package. It handles user inputs parsing (via `App.java` main method) and CLI terminal feedback formatters. See the [June CLI Commands Reference](cmd/README.md) for command specifications.
+## Building and Running
 
-## Build and Setup
+### Requirements
+- JDK 21 or newer.
 
-### 1. Requirements
-
-- Java Development Kit (JDK) 17 or higher.
-
-### 2. Compilation
-
-Compile the codebase (both core library and CLI classes) into the `out/` directory:
-
+### Compile
 ```bash
-javac -d out june/**/*.java cmd/**/*.java
+javac -d out $(find june cmd test -name "*.java")
 ```
 
-Or compile and package the application into JARs:
-- **Reusable Library JAR** (excludes CLI):
-  ```bash
-  jar --create --file june.jar -C out june
-  ```
-- **Executable CLI Wrapper JAR**:
-  ```bash
-  jar --create --file cmd.jar --main-class App -C out .
-  ```
-
-### 3. Execution Entrypoint
-
-Run command wrappers using either the compiled classpath or the packaged JAR:
-
+### Build JARs
 ```bash
-# Using classpath
-java -cp out App <command> [arguments]
+# Core library (without CLI)
+jar --create --file june.jar -C out june
 
-# Using JAR
-java -jar cmd.jar <command> [arguments]
+# Standalone CLI tool
+jar --create --file cmd.jar --main-class App -C out .
 ```
 
-### 4. Bundling a Custom JRE with jlink
+### Run
+```bash
+# From compiled classes
+java -cp out App <command> [args]
 
-To package a standalone execution environment that runs without requiring a pre-installed JDK/JRE system-wide, you can assemble a custom JRE bundle using `jlink`:
+# From executable JAR
+java -jar cmd.jar <command> [args]
+```
 
-1. Build a minimized JRE image containing only the `java.base` module:
-   ```bash
-   jlink --add-modules java.base \
-         --strip-debug \
-         --no-man-pages \
-         --no-header-files \
-         --compress=2 \
-         --output jre
-   ```
+## Command Guide
 
-2. Run the application using the bundled JRE:
-   ```bash
-   # Using classpath
-   ./jre/bin/java -cp out App <command> [arguments]
-
-   # Using JAR
-   ./jre/bin/java -jar cmd.jar <command> [arguments]
-   ```
-
-## Detailed Usage Guide
-
-### 1. `init` — Initialize a Repository
-
-Create a fresh repository directory structure in the current directory:
-
+### `init`
+Start a new repository in the current folder:
 ```bash
 java -cp out App init
 ```
-This initializes the `.june/` directory structure containing `.june/objects/`, `.june/refs/heads/`, `.june/refs/tags/`, and sets the active HEAD reference to `refs/heads/main`.
+To place the `.june` folder elsewhere, set `JUNE_DIR=/path` in your environment or pass `-Djune.dir=/path` to Java.
 
-#### Customizing the Metadata Directory (`.june`) Location
-
-By default, June looks for or creates the `.june/` directory in the current working directory. You can configure a custom parent location for the `.june` metadata directory using either:
-
-1. **Environment Variable (`JUNE_DIR`)**:
-   ```bash
-   export JUNE_DIR=/path/to/custom/parent/folder
-   java -cp out App init
-   ```
-
-2. **JVM System Property (`june.dir`)**:
-   ```bash
-   java -Djune.dir=/path/to/custom/parent/folder -cp out App init
-   ```
-
-### 2. `config` — Manage Configuration Settings
-
-Read or write repository configuration parameters stored in `.june/config`:
-
+### `config`
+View or update repository settings in `.june/config`:
 ```bash
-# Set user name
-java -cp out App config user.name "John Doe"
-
-# Set user email
-java -cp out App config user.email "john@example.com"
-
-# Read a configuration value
+java -cp out App config user.name "Your Name"
+java -cp out App config user.email "you@example.com"
 java -cp out App config user.name
 ```
 
-### 3. `add` — Stage File Changes
-
-Stage files and directories to prepare them for the next commit:
-
+### `add`
+Stage files or folders for your next commit:
 ```bash
-# Stage a single file
 java -cp out App add src/Main.java
-
-# Stage multiple files
-java -cp out App add README.md build.gradle
-
-# Stage directory paths recursively
-java -cp out App add docs/
+java -cp out App add .
 ```
 
-### 4. `status` — Show Workspace Changes
-
-View the difference between the working directory, staging index, and HEAD commit:
-
+### `status`
+See what has changed in your working tree:
 ```bash
 java -cp out App status
 ```
-This outputs the active branch name and lists staged changes, unstaged changes, and untracked files.
 
-### 5. `commit` — Record a Commit Snapshot
-
-Save staged index modifications to the repository log history:
-
+### `commit`
+Save your staged changes to history:
 ```bash
-# Commit standard changes with a message
-java -cp out App commit -m "Create initial project structure"
-
-# Automatically stage modified tracked files and commit
-java -cp out App commit -a -m "Update configuration details"
-# Or combine the flags:
-java -cp out App commit -am "Update configuration details"
+java -cp out App commit -m "Add login authentication"
+java -cp out App commit -a -m "Auto-stage tracked files and commit"
+java -cp out App commit -am "Short auto-stage and commit"
 ```
 
-### 6. `diff` — View Line Differences
-
-Compare lines between workspace files, the staging index, and HEAD:
-
+### `diff`
+Review changes line-by-line:
 ```bash
-# View unstaged changes in the working directory
-java -cp out App diff
-
-# View staged changes in the index compared to HEAD
-java -cp out App diff --staged
-# Or use the alias:
-java -cp out App diff --cached
+java -cp out App diff           # Unstaged changes in working tree vs index
+java -cp out App diff --staged  # Staged changes in index vs current commit
+java -cp out App diff --cached  # Same as --staged
 ```
 
-### 7. `branch` — Manage Branches
-
-Manage branch references to track independent lines of development:
-
+### `branch`
+Work with development branches:
 ```bash
-# List all local branches (active branch is marked with an asterisk)
-java -cp out App branch
-
-# Create a new branch pointing to the current commit
-java -cp out App branch feature-auth
-
-# Rename active branch to master
-java -cp out App branch -m master
-# Or using the mv subcommand:
-java -cp out App branch mv master
-
-# Rename specific branch
-java -cp out App branch -m old-name new-name
-
-# Delete a branch (checks for unmerged history)
-java -cp out App branch -d feature-auth
-
-# Force delete a branch
-java -cp out App branch -D feature-auth
+java -cp out App branch                    # List local branches (* shows current)
+java -cp out App branch feature            # Create a branch at current commit
+java -cp out App branch -m new-name        # Rename current branch
+java -cp out App branch -m old new         # Rename a specific branch
+java -cp out App branch -d feature         # Delete a merged branch
+java -cp out App branch -D feature         # Force delete an unmerged branch
 ```
 
-### 8. `tag` — Manage Tags
-
-Create, list, or delete reference tags:
-
+### `tag`
+Create and manage commit tags:
 ```bash
-# List all tags in the repository
-java -cp out App tag
-
-# Create a tag pointing to the current commit
-java -cp out App tag v1.0.0
-
-# Create a tag pointing to a specific commit hash or resolved ref
-java -cp out App tag v1.0.0 a94a8f
-
-# Delete a tag
-java -cp out App tag -d v1.0.0
+java -cp out App tag                       # List all tags
+java -cp out App tag v1.0                  # Tag current commit
+java -cp out App tag v1.0 a94a8f           # Tag a specific commit
+java -cp out App tag -d v1.0               # Delete a tag
 ```
 
-### 9. `checkout` — Switch Active States
-
-Switch the active branch or align workspace files with a tag/commit hash:
-
+### `checkout`
+Switch branches or inspect an older snapshot:
 ```bash
-# Switch to an existing branch
-java -cp out App checkout feature-auth
-
-# Switch to a specific tag or commit hash (detached HEAD state)
-java -cp out App checkout v1.0.0
-java -cp out App checkout a94a8f
+java -cp out App checkout feature          # Switch to branch
+java -cp out App checkout a94a8f           # Inspect a specific commit (detached HEAD)
 ```
 
-### 10. `restore` — Discard Workspace and Index Changes
-
-Discard local edits or unstage files in the index:
-
+### `restore`
+Discard edits or unstage files:
 ```bash
-# Discard working directory modifications and restore from the staging index
-java -cp out App restore src/Main.java
-
-# Unstage files in the index (reverts index state back to HEAD commit)
-java -cp out App restore --staged src/Main.java
+java -cp out App restore src/Main.java          # Discard edits and restore from index
+java -cp out App restore --staged src/Main.java # Unstage changes back to last commit
 ```
 
-### 11. `rm` — Remove Files from Tracking
-
-Stop tracking files and optionally remove them from the physical workspace:
-
+### `rm`
+Stop tracking files:
 ```bash
-# Remove tracking and delete the file from the disk
-java -cp out App rm src/Legacy.java
-
-# Remove tracking but keep the physical file in the working directory
-java -cp out App rm --cached src/Legacy.java
+java -cp out App rm legacy.txt          # Remove from index and delete from disk
+java -cp out App rm --cached config.xml # Remove from index but keep on disk
 ```
 
-### 12. `mv` — Move or Rename Files
-
-Rename a file or directory path, updating both the workspace and staging index:
-
+### `mv`
+Rename or move a file:
 ```bash
-java -cp out App mv src/OldName.java src/NewName.java
+java -cp out App mv src/Old.java src/New.java
 ```
 
-### 13. `cat-file` — Inspect Repository Objects
-
-Decompress and print raw database object details (blobs, trees, commits):
-
+### `cat-file`
+Inspect an object directly by its hash:
 ```bash
-# Pretty-print the resolved contents of an object hash
 java -cp out App cat-file -p a94a8f
 ```
 
-### 14. `log` — View Commit History
-
-Display the commit logs in reverse chronological order:
-
+### `log`
+Browse through commit history:
 ```bash
-# Print standard commit log history
-java -cp out App log
-
-# Print condensed single-line log history
-java -cp out App log --oneline
-
-# Limit the log to a specific count of commits
-java -cp out App log -n 5
-# Or use the alias:
-java -cp out App log --max-count 5
-
-# Combine formatting and count limit
-java -cp out App log --oneline -n 5
+java -cp out App log                       # Full log with authors and dates
+java -cp out App log --oneline             # Compact, one line per commit
+java -cp out App log -n 5                  # Show only the last 5 commits
 ```
 
-### 15. `merge` — Merge Branch History
-
-Integrate another branch, tag, or commit history into the currently checked-out branch using fast-forward merges only:
-
+### `merge`
+Fast-forward your active branch to another branch, tag, or commit:
 ```bash
-# Fast-forward the active branch pointer to feature-auth's commit
-java -cp out App merge feature-auth
+java -cp out App merge feature
 ```
 
-### 16. `reset` — Hard Reset Reference State
-
-Hard reset the working directory, staging index, and active branch references to a commit hash:
-
+### `reset`
+Reset your working tree, index, and branch pointer to any commit:
 ```bash
 java -cp out App reset --hard a94a8f
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License. See LICENSE for details.

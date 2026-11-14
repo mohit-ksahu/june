@@ -1,2 +1,8 @@
-**/.DS_Store
+*.class
 out/
+*.jar
+test/
+.june/
+.vscode/
+.DS_Store
+*.tmp

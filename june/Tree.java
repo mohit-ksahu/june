@@ -1,76 +1,73 @@
 package june;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 public class Tree extends ObjectData {
-  public record Entry(String mode, String name, String sha1) implements Comparable<Entry> {
-
+  public record Entry(String mode, String name, String hash) implements Comparable<Entry> {
     @Override
-    public int compareTo(Entry o) {
-      String a = name + (mode.equals(Modes.TREE) ? "/" : "");
-      String b = o.name + (o.mode.equals(Modes.TREE) ? "/" : "");
-      return a.compareTo(b);
+    public int compareTo(Entry other) {
+      String first = name + (mode.equals(Mode.TREE) ? "/" : "");
+      String second = other.name + (other.mode.equals(Mode.TREE) ? "/" : "");
+      return first.compareTo(second);
     }
   }
 
   private final List<Entry> entries;
 
   public Tree(List<Entry> entries) {
-    super(ObjectTypes.TREE, serialize(entries));
+    super(TREE, serialize(entries));
     this.entries = entries;
   }
 
   public Tree(byte[] rawData) {
-    super(ObjectTypes.TREE, rawData);
-    this.entries = parseEntries(rawData);
+    super(TREE, rawData);
+    this.entries = parse(rawData);
   }
 
-  public List<Entry> getEntries() {
+  public List<Entry> entries() {
     return entries;
   }
 
   private static byte[] serialize(List<Entry> entries) {
     Collections.sort(entries);
-    java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-    for (Entry e : entries) {
-      out.writeBytes((e.mode + " " + e.name + "\0").getBytes(StandardCharsets.UTF_8));
-      out.writeBytes(Sha1.fromHex(e.sha1));
+    ByteArrayOutputStream out = new ByteArrayOutputStream();
+    for (Entry entry : entries) {
+      out.writeBytes((entry.mode + " " + entry.name + "\0").getBytes(StandardCharsets.UTF_8));
+      out.writeBytes(Hash.fromHex(entry.hash));
     }
     return out.toByteArray();
   }
 
-  private static List<Entry> parseEntries(byte[] data) {
+  private static List<Entry> parse(byte[] data) {
     List<Entry> list = new ArrayList<>();
     int i = 0;
     while (i < data.length) {
-      int sp = indexOf(data, (byte) ' ', i);
-      if (sp == -1) {
+      int space = index(data, (byte) ' ', i);
+      if (space == -1) {
         break;
       }
-      String mode = new String(data, i, sp - i, StandardCharsets.UTF_8);
+      String mode = new String(data, i, space - i, StandardCharsets.UTF_8);
 
-      int nul = indexOf(data, (byte) 0, sp + 1);
+      int nul = index(data, (byte) 0, space + 1);
       if (nul == -1) {
         break;
       }
-      String name = new String(data, sp + 1, nul - sp - 1, StandardCharsets.UTF_8);
+      String name = new String(data, space + 1, nul - space - 1, StandardCharsets.UTF_8);
 
       if (nul + 21 > data.length) {
-        throw new IllegalArgumentException("Malformed tree: truncated SHA-1");
+        throw new OperationException("Malformed tree: truncated hash");
       }
-      byte[] hash = new byte[20];
-      System.arraycopy(data, nul + 1, hash, 0, 20);
-
-      list.add(new Entry(mode, name, Sha1.toHex(hash)));
+      list.add(new Entry(mode, name, Hash.toHex(data, nul + 1, nul + 21)));
       i = nul + 21;
     }
     return list;
   }
 
-  private static int indexOf(byte[] data, byte target, int from) {
+  private static int index(byte[] data, byte target, int from) {
     for (int i = from; i < data.length; i++) {
       if (data[i] == target) {
         return i;

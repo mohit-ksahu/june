@@ -3,6 +3,10 @@ package june;
 import java.nio.charset.StandardCharsets;
 
 public class ObjectData {
+  public static final String BLOB = "blob";
+  public static final String TREE = "tree";
+  public static final String COMMIT = "commit";
+
   protected final String type;
   protected final byte[] data;
 
@@ -11,11 +15,11 @@ public class ObjectData {
     this.data = data;
   }
 
-  public String getType() {
+  public String type() {
     return type;
   }
 
-  public byte[] getData() {
+  public byte[] data() {
     return data;
   }
 
@@ -29,10 +33,10 @@ public class ObjectData {
 
   public static ObjectData create(String type, byte[] data) {
     return switch (type) {
-      case ObjectTypes.BLOB -> new ObjectData(ObjectTypes.BLOB, data);
-      case ObjectTypes.TREE -> new Tree(data);
-      case ObjectTypes.COMMIT -> new Commit(data);
-      default -> throw new IllegalArgumentException("Unknown object type: " + type);
+      case BLOB -> new ObjectData(BLOB, data);
+      case TREE -> new Tree(data);
+      case COMMIT -> new Commit(data);
+      default -> throw new OperationException("Unknown object type: " + type);
     };
   }
 }

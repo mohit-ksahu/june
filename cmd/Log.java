@@ -1,62 +1,70 @@
-import java.io.IOException;
 import java.util.List;
 import june.OperationException;
 import june.Repository;
-import june.lib.Log.LogEntry;
+import june.Repository.LogEntry;
+import june.Worktree;
 
 public final class Log {
-
-  private static final String ANSI_RESET = "\u001B[0m";
-  private static final String ANSI_YELLOW = "\u001B[33m";
+  private static final String RESET = "\u001B[0m";
+  private static final String YELLOW = "\u001B[33m";
 
   public static void run(Repository repo, String[] args) throws Exception {
-    boolean oneline = false;
-    for (String arg : args) {
-      if (arg.equals("--oneline")) {
-        oneline = true;
-      }
-    }
-    List<LogEntry> entries = repo.log(parseMaxCount(args));
+    boolean oneline = List.of(args).contains("--oneline");
+    List<LogEntry> entries = repo.log(limit(args));
     if (entries.isEmpty()) {
       System.out.println("No commits yet.");
-    } else {
-      formatLog(entries, oneline);
+      return;
+    }
+    for (LogEntry entry : entries) {
+      print(entry, oneline);
     }
   }
 
-  private static int parseMaxCount(String[] args) {
+  private static int limit(String[] args) {
     for (int i = 0; i < args.length; i++) {
-      if (args[i].equals("-n") || args[i].equals("--max-count")) {
-        if (i + 1 >= args.length) {
-          throw new OperationException("option '" + args[i] + "' requires a value");
-        }
-        String val = args[i + 1];
-        if (!val.matches("\\d+")) {
-          throw new OperationException("invalid argument for " + args[i] + ": " + val);
-        }
-        return Integer.parseInt(val);
+      if (!args[i].equals("-n") && !args[i].equals("--max-count")) {
+        continue;
       }
+      if (i + 1 >= args.length) {
+        throw new OperationException("option '" + args[i] + "' requires a value");
+      }
+      String text = args[i + 1];
+      if (!digits(text)) {
+        throw new OperationException("invalid argument for " + args[i] + ": " + text);
+      }
+      return Integer.parseInt(text);
     }
     return Integer.MAX_VALUE;
   }
 
-  private static void formatLog(List<LogEntry> entries, boolean oneline) {
-    for (LogEntry entry : entries) {
-      if (oneline) {
-        System.out.println(ANSI_YELLOW + entry.sha1().substring(0, 7) + ANSI_RESET
-            + " " + entry.message().split("\n")[0]);
-      } else {
-        System.out.println(ANSI_YELLOW + "commit " + entry.sha1() + ANSI_RESET);
-        System.out.println("Author: " + entry.author());
-        if (!entry.date().isEmpty()) {
-          System.out.println("Date:   " + entry.date());
-        }
-        System.out.println();
-        for (String line : entry.message().split("\n")) {
-          System.out.println("    " + line);
-        }
-        System.out.println();
+  private static boolean digits(String s) {
+    for (int i = 0; i < s.length(); i++) {
+      char c = s.charAt(i);
+      if (c < '0' || c > '9') {
+        return false;
       }
+    }
+    return !s.isEmpty();
+  }
+
+  private static void print(LogEntry entry, boolean oneline) {
+    if (oneline) {
+      System.out.println(YELLOW + entry.hash().substring(0, 7) + RESET
+          + " " + Worktree.title(entry.message()));
+      return;
+    }
+    System.out.println(YELLOW + "commit " + entry.hash() + RESET);
+    if (!entry.parents().isEmpty()) {
+      List<String> list = entry.parents().stream().map(p -> p.substring(0, 7)).toList();
+      System.out.println("Merge: " + String.join(" ", list));
+    }
+    System.out.println("Author: " + entry.author());
+    if (!entry.date().isEmpty()) {
+      System.out.println("Date:   " + entry.date());
+    }
+    System.out.println();
+    for (String line : entry.message().split("\n")) {
+      System.out.println("    " + line);
     }
   }
 }

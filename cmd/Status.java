@@ -1,43 +1,41 @@
-import java.io.IOException;
 import java.util.List;
 import june.Repository;
-import june.lib.Status.FileChange;
-import june.lib.Status.StatusResult;
+import june.Repository.FileChange;
+import june.Repository.StatusResult;
 
 public final class Status {
-
-  private static final String ANSI_RESET = "\u001B[0m";
-  private static final String ANSI_GREEN = "\u001B[32m";
-  private static final String ANSI_RED = "\u001B[31m";
+  private static final String RESET = "\u001B[0m";
+  private static final String GREEN = "\u001B[32m";
+  private static final String RED = "\u001B[31m";
 
   public static void run(Repository repo, String[] args) throws Exception {
-    formatStatus(repo.status());
+    print(repo.status());
   }
 
-  private static void formatStatus(StatusResult sr) {
-    System.out.println(sr.branch());
-    printSection("Changes to be committed:",
+  private static void print(StatusResult result) {
+    System.out.println(result.branch());
+    section("Changes to be committed:",
         "  (use \"june restore --staged <file>...\" to unstage)",
-        formatChanges(sr.staged()), ANSI_GREEN);
-    printSection("Changes not staged for commit:",
+        changes(result.staged()), GREEN);
+    section("Changes not staged for commit:",
         "  (use \"june add <file>...\" to update what will be committed)\n"
             + "  (use \"june restore <file>...\" to discard changes in working directory)",
-        formatChanges(sr.unstaged()), ANSI_RED);
-    printSection("Untracked files:",
+        changes(result.unstaged()), RED);
+    section("Untracked files:",
         "  (use \"june add <file>...\" to include in what will be committed)",
-        sr.untracked().stream().map(s -> "  " + s).toList(), ANSI_RED);
-    if (sr.staged().isEmpty() && sr.unstaged().isEmpty() && sr.untracked().isEmpty()) {
+        result.untracked().stream().map(path -> "  " + path).toList(), RED);
+    if (result.staged().isEmpty() && result.unstaged().isEmpty() && result.untracked().isEmpty()) {
       System.out.println("nothing to commit, working tree clean");
     }
   }
 
-  private static List<String> formatChanges(List<FileChange> changes) {
-    return changes.stream()
-        .map(c -> "  " + c.type().name().toLowerCase() + ":   " + c.path())
+  private static List<String> changes(List<FileChange> list) {
+    return list.stream()
+        .map(change -> "  " + change.type().name().toLowerCase() + ":   " + change.path())
         .toList();
   }
 
-  private static void printSection(String title, String hint, List<String> items, String color) {
+  private static void section(String title, String hint, List<String> items, String color) {
     if (items.isEmpty()) {
       return;
     }
@@ -47,6 +45,6 @@ public final class Status {
     for (String item : items) {
       System.out.println(item);
     }
-    System.out.println(ANSI_RESET);
+    System.out.println(RESET);
   }
 }

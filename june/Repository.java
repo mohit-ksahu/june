@@ -4,12 +4,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Comparator;
+import java.nio.file.Path;
 import java.util.List;
-import june.ObjectStore.ObjectStream;
+import java.util.stream.Stream;
 
 public class Repository {
   public static final String REPO_DIR = ".june";
@@ -22,36 +19,33 @@ public class Repository {
   public static final String HEADS_REF_PREFIX = REF_PREFIX + REFS + "/" + HEADS + "/";
   public static final String MAIN_BRANCH = "main";
 
+  public record CommitResult(String message, String hash, String branch) {}
+  public record BranchResult(List<String> branches, String current) {}
+  public record LogEntry(String hash, String author, String date, String message, List<String> parents) {}
+  public record StatusResult(String branch, List<FileChange> staged, List<FileChange> unstaged, List<String> untracked) {}
+  public record FileChange(String path, StatusChangeType type) {}
+  public enum StatusChangeType { ADDED, DELETED, MODIFIED }
+
   private final File rootDir;
   private final File repoDir;
-  private final File refsDir;
   private final File headsDir;
   private final File tagsDir;
   private final File headFile;
   private final File indexFile;
-  private final ObjectStore objects;
+  private final Odb objects;
   private final File currentDir;
 
   public Repository(File currentDir) {
-    this(currentDir, readRepoParent());
+    this(currentDir, parent());
   }
 
-  public Repository(File currentDir, File customRepoParent) {
+  public Repository(File currentDir, File customParent) {
     this.currentDir = currentDir.getAbsoluteFile();
-    if (customRepoParent != null) {
-      this.repoDir = new File(customRepoParent, REPO_DIR);
+    if (customParent != null) {
+      this.repoDir = new File(customParent, REPO_DIR);
       this.rootDir = currentDir.getAbsoluteFile();
     } else {
-      File dir = currentDir.getAbsoluteFile();
-      File found = null;
-      while (dir != null) {
-        File test = new File(dir, REPO_DIR);
-        if (test.isDirectory()) {
-          found = test;
-          break;
-        }
-        dir = dir.getParentFile();
-      }
+      File found = find(currentDir);
       if (found != null) {
         this.repoDir = found;
         this.rootDir = found.getParentFile();
@@ -60,17 +54,17 @@ public class Repository {
         this.rootDir = currentDir;
       }
     }
-    this.refsDir = new File(repoDir, REFS);
+    File refsDir = new File(repoDir, REFS);
     this.headsDir = new File(refsDir, HEADS);
     this.tagsDir = new File(refsDir, TAGS);
     this.headFile = new File(repoDir, HEAD_FILE);
     this.indexFile = new File(repoDir, INDEX_FILE);
-    this.objects = new ObjectStore(repoDir);
+    this.objects = new Odb(new File(repoDir, Odb.OBJECTS_DIR_NAME));
   }
 
-  public String getRelativePath(String path) {
-    File f = new File(path);
-    File absFile = f.isAbsolute() ? f : new File(currentDir, path).getAbsoluteFile();
+  public String relPath(String path) {
+    File file = new File(path);
+    File absFile = file.isAbsolute() ? file : new File(currentDir, path).getAbsoluteFile();
     String rel = rootDir.getAbsoluteFile().toPath().normalize()
         .relativize(absFile.toPath().normalize()).toString().replace('\\', '/');
     if (rel.startsWith("../") || rel.equals("..")) {
@@ -79,26 +73,21 @@ public class Repository {
     return (rel.equals(".") || rel.isEmpty()) ? "" : rel;
   }
 
-
-  private static File readRepoParent() {
+  private static File parent() {
     String directory = System.getProperty("june.dir", System.getenv("JUNE_DIR"));
     return (directory != null && !directory.isBlank()) ? new File(directory).getAbsoluteFile() : null;
   }
 
-  public File getRootDir() {
+  public File rootDir() {
     return rootDir;
   }
 
-  public File getRepoDir() {
+  public File repoDir() {
     return repoDir;
   }
 
-  public File getIndexFile() {
+  public File indexFile() {
     return indexFile;
-  }
-
-  public ObjectStore getObjects() {
-    return objects;
   }
 
   public boolean exists() {
@@ -108,40 +97,34 @@ public class Repository {
   public void init() throws IOException {
     repoDir.mkdirs();
     objects.mkdirs();
-    refsDir.mkdirs();
     headsDir.mkdirs();
     tagsDir.mkdirs();
     if (!headFile.exists()) {
-      Files.writeString(
-          headFile.toPath(), HEADS_REF_PREFIX + MAIN_BRANCH + "\n", StandardCharsets.UTF_8);
+      Files.writeString(headFile.toPath(), HEADS_REF_PREFIX + MAIN_BRANCH + "\n");
     }
   }
 
-  public String getHeadTarget() throws IOException {
-    return headFile.exists() ? Files.readString(headFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+  public String headTarget() throws IOException {
+    return read(headFile);
   }
 
-  public void setHeadTarget(String target) throws IOException {
-    writeWithLock(headFile, target + "\n");
+  public void setHead(String target) throws IOException {
+    writeLock(headFile, target + "\n");
   }
 
-  public String getCurrentBranch() throws IOException {
-    String head = getHeadTarget();
+  public String currentBranch() throws IOException {
+    String head = headTarget();
     return (head != null && head.startsWith(HEADS_REF_PREFIX))
         ? head.substring(HEADS_REF_PREFIX.length()).trim()
         : null;
   }
 
-  public String getHeadCommitSha1() throws IOException {
-    String head = getHeadTarget();
+  public String headSha() throws IOException {
+    String head = headTarget();
     if (head == null) {
       return null;
     }
-    if (head.startsWith(REF_PREFIX)) {
-      File refFile = headRefFile(head);
-      return refFile.exists() ? Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim() : null;
-    }
-    return head;
+    return head.startsWith(REF_PREFIX) ? read(headFile(head)) : head;
   }
 
   public String resolveRef(String ref) throws IOException {
@@ -149,86 +132,78 @@ public class Repository {
       return null;
     }
     if (ref.equals("HEAD")) {
-      return getHeadCommitSha1();
+      return headSha();
     }
     if (branchExists(ref)) {
-      return readBranchRef(ref);
+      return readBranch(ref);
     }
     if (tagExists(ref)) {
-      return readTagRef(ref);
+      return readTag(ref);
     }
-    return Helper.resolveShortSha1(repoDir, ref);
+    return Refs.resolve(repoDir, ref);
   }
 
-  public void updateBranchRef(String name, String sha) throws IOException {
-    writeWithLock(branchRefFile(name), sha + "\n");
+  public void writeBranch(String name, String sha) throws IOException {
+    writeLock(branchFile(name), sha + "\n");
   }
 
-  public void updateHeadRefOrCommit(String sha) throws IOException {
-    String head = getHeadTarget();
+  public void updateHead(String sha) throws IOException {
+    String head = headTarget();
     if (head != null && head.startsWith(REF_PREFIX)) {
-      writeWithLock(headRefFile(head), sha + "\n");
+      writeLock(headFile(head), sha + "\n");
     } else {
-      setHeadTarget(sha);
+      setHead(sha);
     }
   }
 
-  public List<String> getBranches() throws IOException {
-    return listRefs(headsDir);
+  public List<String> branchNames() throws IOException {
+    return list(headsDir);
   }
 
   public boolean branchExists(String name) {
-    return branchRefFile(name).isFile();
+    return branchFile(name).isFile();
   }
 
-  public String readBranchRef(String name) throws IOException {
-    File refFile = branchRefFile(name);
-    return refFile.isFile() ? Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+  public String readBranch(String name) throws IOException {
+    return read(branchFile(name));
   }
 
-  public String deleteBranchRef(String name) throws IOException {
-    File refFile = branchRefFile(name);
-    if (!refFile.isFile()) {
-      throw new OperationException("branch '" + name + "' not found.");
-    }
-    String sha = Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim();
-    if (!refFile.delete()) {
-      throw new IOException("could not delete branch ref: " + refFile);
-    }
-    Helper.deleteEmptyParentDirs(refFile.getParentFile(), headsDir);
-    return sha;
-  }
-
-  public List<String> getTags() throws IOException {
-    return listRefs(tagsDir);
+  public String dropBranch(String name) throws IOException {
+    return drop(branchFile(name), headsDir, "branch");
   }
 
   public boolean tagExists(String name) {
-    return tagRefFile(name).isFile();
+    return tagFile(name).isFile();
   }
 
-  public String readTagRef(String name) throws IOException {
-    File refFile = tagRefFile(name);
-    return refFile.isFile() ? Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim() : null;
+  public String readTag(String name) throws IOException {
+    return read(tagFile(name));
   }
 
-  public void createTag(String name, String sha) throws IOException {
+  public void writeTag(String name, String sha) throws IOException {
     if (tagExists(name)) {
       throw new OperationException("tag '" + name + "' already exists");
     }
-    writeWithLock(tagRefFile(name), sha + "\n");
+    writeLock(tagFile(name), sha + "\n");
   }
 
-  public String deleteTagRef(String name) throws IOException {
-    File refFile = tagRefFile(name);
-    if (!refFile.isFile()) {
-      throw new OperationException("tag '" + name + "' not found.");
+  public String tagDelete(String name) throws IOException {
+    return drop(tagFile(name), tagsDir, "tag");
+  }
+
+  private static String read(File file) throws IOException {
+    return file.isFile() ? Files.readString(file.toPath(), StandardCharsets.UTF_8).trim() : null;
+  }
+
+  private String drop(File file, File base, String kind) throws IOException {
+    if (!file.isFile()) {
+      throw new OperationException(kind + " '" + file.getName() + "' not found.");
     }
-    String sha = Files.readString(refFile.toPath(), StandardCharsets.UTF_8).trim();
-    if (!refFile.delete()) {
-      throw new IOException("could not delete tag ref: " + refFile);
+    String sha = Files.readString(file.toPath(), StandardCharsets.UTF_8).trim();
+    if (!file.delete()) {
+      throw new IOException("could not delete " + kind + " ref: " + file);
     }
-    Helper.deleteEmptyParentDirs(refFile.getParentFile(), tagsDir);
+    Refs.clean(file.getParentFile(), base);
     return sha;
   }
 
@@ -242,31 +217,27 @@ public class Repository {
 
   public Commit readCommit(String sha) throws IOException {
     ObjectData obj = objects.read(sha);
-    if (!(obj instanceof Commit c)) {
-      throw new OperationException("object " + sha + " is a " + obj.getType() + ", not a commit");
+    if (!(obj instanceof Commit commit)) {
+      throw new OperationException("object " + sha + " is a " + obj.type() + ", not a commit");
     }
-    return c;
+    return commit;
   }
 
-  public ObjectStream getObjectStream(String sha) throws IOException {
-    return objects.getObjectStream(sha);
+  public void write(String hash, File dest) throws IOException {
+    objects.write(hash, dest);
   }
 
-  public void readToFile(String sha, File dest) throws IOException {
-    objects.readToFile(sha, dest);
-  }
-
-  public File branchRefFile(String name) {
-    validateRefName(name);
+  public File branchFile(String name) {
+    check(name, "name");
     return new File(headsDir, name);
   }
 
-  public File tagRefFile(String name) {
-    validateRefName(name);
+  public File tagFile(String name) {
+    check(name, "name");
     return new File(tagsDir, name);
   }
 
-  public File headRefFile(String headTarget) {
+  public File headFile(String headTarget) {
     if (headTarget == null || !headTarget.startsWith(REF_PREFIX)) {
       throw new OperationException("malformed HEAD reference");
     }
@@ -274,124 +245,135 @@ public class Repository {
     if (ref.isEmpty()) {
       throw new OperationException("malformed HEAD reference");
     }
-    validateRefPath(ref);
+    check(ref, "path");
     return new File(repoDir, ref);
   }
 
-  private static void validateRefPath(String path) {
-    if (path == null || path.isBlank() || path.contains("\0") || path.startsWith("/")
-        || path.contains("..") || path.contains("\\")) {
-      throw new OperationException("invalid ref path: " + path);
+  private static void check(String ref, String kind) {
+    if (ref == null || ref.isBlank() || ref.contains("\0") || ref.startsWith("/")
+        || ref.contains("..") || ref.contains("\\")) {
+      throw new OperationException("invalid ref " + kind + ": " + ref);
     }
   }
 
-  private static void validateRefName(String name) {
-    if (name == null || name.isBlank() || name.contains("\0") || name.contains("..")
-        || name.startsWith("/") || name.contains("\\")) {
-      throw new OperationException("invalid ref name: " + name);
-    }
-  }
-
-  public String writeFileOrSymlinkTarget(File target, String mode) throws Exception {
-    if (mode.equals(Modes.SYMLINK)) {
+  public String writeTarget(File target, String mode) throws Exception {
+    if (mode.equals(Mode.SYMLINK)) {
       String linkTarget = Files.readSymbolicLink(target.toPath()).toString();
-      return write(new ObjectData(ObjectTypes.BLOB, linkTarget.getBytes(StandardCharsets.UTF_8)));
+      return write(new ObjectData(ObjectData.BLOB, linkTarget.getBytes(StandardCharsets.UTF_8)));
     }
     return objects.writeBlob(target);
   }
 
-  public void writeWithLock(File target, String content) throws IOException {
-    File lock = new File(target.getParentFile(), target.getName() + ".lock");
-    FileLock.acquireOrBreak(lock);
-    Files.writeString(lock.toPath(), content, StandardCharsets.UTF_8);
-    Files.move(lock.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
+  public void writeLock(File target, String content) throws IOException {
+    FileLock.write(target, content);
   }
 
-  private List<String> listRefs(File dir) throws IOException {
+  private List<String> list(File dir) throws IOException {
     if (!dir.isDirectory()) {
       return List.of();
     }
-    try (java.util.stream.Stream<java.nio.file.Path> stream = Files.walk(dir.toPath())) {
+    try (Stream<Path> stream = Files.walk(dir.toPath())) {
       return stream.filter(Files::isRegularFile)
-          .map(p -> dir.toPath().relativize(p).toString().replace('\\', '/'))
+          .map(path -> dir.toPath().relativize(path).toString().replace('\\', '/'))
           .sorted()
           .toList();
     }
   }
 
+  private static File find(File currentDir) {
+    File dir = currentDir.getAbsoluteFile();
+    while (dir != null) {
+      File test = new File(dir, REPO_DIR);
+      if (test.isDirectory()) {
+        return test;
+      }
+      dir = dir.getParentFile();
+    }
+    return null;
+  }
+
   public void add(List<String> paths) throws Exception {
-    june.lib.Add.add(this, paths);
+    Index index = new Index(indexFile());
+    var rules = Ignore.load(rootDir());
+    for (String rawPath : paths) {
+      Worktree.process(this, index, rules, rawPath);
+    }
+    index.write();
   }
 
-  public june.lib.Commit.CommitResult commit(String msg, boolean auto) throws Exception {
-    return june.lib.Commit.commit(this, msg, auto);
-  }
-
-  public june.lib.Status.StatusResult status() throws Exception {
-    return june.lib.Status.status(this);
-  }
-
-  public june.lib.Branch.BranchResult listBranches() throws Exception {
-    return june.lib.Branch.list(this);
-  }
-
-  public String createBranch(String name) throws Exception {
-    return june.lib.Branch.create(this, name);
-  }
-
-  public String deleteBranch(String name, boolean force) throws Exception {
-    return june.lib.Branch.delete(this, name, force);
+  public CommitResult commit(String message, boolean auto) throws Exception {
+    return Revision.commit(this, message, auto);
   }
 
   public String checkout(String target) throws Exception {
-    return june.lib.Checkout.checkout(this, target);
+    return Worktree.checkout(this, target);
   }
 
-  public String restore(List<String> paths, boolean staged) throws Exception {
-    return june.lib.Restore.restore(this, paths, staged);
+  public StatusResult status() throws Exception {
+    return Worktree.status(this);
   }
 
   public String diff(boolean staged) throws Exception {
-    return june.lib.Diff.diff(this, staged);
+    return Worktree.diff(this, staged);
   }
 
-  public String rm(List<String> paths, boolean cached) throws Exception {
-    return june.lib.Rm.rm(this, paths, cached);
-  }
-
-  public String mv(String src, String dest) throws Exception {
-    return june.lib.Mv.mv(this, src, dest);
-  }
-
-  public List<String> listTags() throws Exception {
-    return june.lib.Tag.list(this);
-  }
-
-  public String deleteTag(String name) throws Exception {
-    return june.lib.Tag.delete(this, name);
+  public List<LogEntry> log(int limit) throws IOException {
+    return Revision.log(this, limit);
   }
 
   public String merge(String target) throws Exception {
-    return june.lib.Merge.merge(this, target);
+    return Revision.merge(this, target);
   }
 
   public String reset(String target) throws Exception {
-    return june.lib.Reset.reset(this, target);
+    return Worktree.reset(this, target);
   }
 
-  public List<june.lib.Log.LogEntry> log(int max) throws Exception {
-    return june.lib.Log.log(this, max);
+  public String restore(List<String> paths, boolean staged) throws IOException {
+    return Worktree.restore(this, paths, staged);
   }
 
-  public String catFile(String ref) throws Exception {
-    return june.lib.CatFile.catFile(this, ref);
+  public String rm(List<String> paths, boolean cached) throws IOException {
+    return Worktree.rm(this, paths, cached);
   }
 
-  public String getConfig(String key) throws Exception {
-    return june.lib.Config.get(this, key);
+  public String mv(String sourcePath, String destinationPath) throws Exception {
+    return Worktree.mv(this, sourcePath, destinationPath);
   }
 
-  public void setConfig(String key, String value) throws Exception {
-    june.lib.Config.set(this, key, value);
+  public String catFile(String ref) throws IOException {
+    return Revision.catFile(this, ref);
+  }
+
+  public BranchResult branchList() throws IOException {
+    return Refs.branchList(this);
+  }
+
+  public String branchCreate(String name) throws IOException {
+    return Refs.branchCreate(this, name);
+  }
+
+  public String branchDelete(String name, boolean force) throws IOException {
+    return Refs.branchDelete(this, name, force);
+  }
+
+  public String branchRename(String oldName, String newName) throws IOException {
+    return Refs.branchRename(this, oldName, newName);
+  }
+
+  public List<String> tagList() throws IOException {
+    return list(tagsDir);
+  }
+
+  public void tagCreate(String name, String targetRef) throws IOException {
+    Refs.tagCreate(this, name, targetRef);
+  }
+
+  public String configGet(String key) throws IOException {
+    return Refs.configGet(this, key);
+  }
+
+  public void configSet(String key, String value) throws IOException {
+    Refs.configSet(this, key, value);
   }
 }

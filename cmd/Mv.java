@@ -1,4 +1,3 @@
-import java.io.IOException;
 import june.OperationException;
 import june.Repository;
 

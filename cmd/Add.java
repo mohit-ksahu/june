@@ -1,5 +1,4 @@
-import java.io.IOException;
-import java.util.Arrays;
+import java.util.List;
 import june.OperationException;
 import june.Repository;
 
@@ -8,6 +7,6 @@ public final class Add {
     if (args.length == 0) {
       throw new OperationException("nothing specified, nothing added");
     }
-    repo.add(Arrays.asList(args));
+    repo.add(List.of(args));
   }
 }

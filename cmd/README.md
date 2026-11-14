@@ -1,244 +1,152 @@
-# June CLI Commands Reference
+# June CLI Commands
 
-June command endpoints parse inputs, enforce validation rules, and route arguments to the `june.lib` library.
+The June command-line interface handles argument parsing, input validation, terminal colors, and delegates operations directly to `june.Repository`.
 
-## 1. Command Syntax and Router Dispatch
+## How the CLI Works
 
-The entry point of the command interface is the `App` class in the `cmd` directory. When a user runs a command from the shell:
-1. `App.main` parses the command name from the first argument (`args[0]`).
-2. Slices the remaining arguments using `Arrays.copyOfRange(args, 1, args.length)` to isolate the parameters for the specific command.
-3. Instantiates the repository state controller (`new Repository(new File("."))`).
-   - Note: The `Repository` constructor checks for the JVM system property `june.dir` or the system environment variable `JUNE_DIR` to determine the custom parent directory for the `.june` metadata directory. If either is set, it resolves `.june` relative to that path.
-4. Checks if the repository exists on disk (unless the command is `init`).
-5. Dispatches execution to the corresponding command handler class directly in the `cmd` project (default package).
+The main entry point is `App.java`. When you run a command:
 
-If a command fails because of invalid input or runtime errors, the CLI wrapper catches the exception, prints the error message prepended with "fatal: " to standard error, and exits with code 1.
+1. **Pick the command**: It takes `args[0]` as the command name and passes the remaining arguments to that command's handler.
+2. **Find the repository**: It creates a `new Repository(new File("."))`. If you set `JUNE_DIR` in your environment or pass `-Djune.dir` to Java, it uses that directory; otherwise, it looks for `.june` in the current folder or walks up parent folders.
+3. **Verify repository exists**: Unless you are running `init`, it makes sure `.june` exists on disk before doing any work.
+4. **Dispatch**: Passes the `Repository` instance directly to the static `run(repo, args)` method in the matching handler class under `cmd/`.
+5. **Handle errors**: Catches any `OperationException` or `IOException`, prints `fatal: <message>` to `System.err`, and exits with status code 1.
 
-## 2. Command Specifications
+## Command Reference
 
-### 1. `init`
+### `init`
+- **Usage**: `june init`
+- **What it does**: Creates `.june/`, `.june/objects/`, `.june/refs/heads/`, `.june/refs/tags/`, and sets the initial `HEAD` to `ref: refs/heads/main\n`.
+- **Output**: Prints `Initialized empty repository in <path>/.june/`.
 
-* **Syntax**: `june init`
-- Setting up a repository directory structure is necessary before running any other version control operations.
-- Creating the database directories initializes a fresh tracking scope. If the HEAD reference file is missing, June writes a default pointer targeting the main branch.
-- In `june.cmd.Init`, June invokes `repo.init()` which generates `.june/`, `.june/objects/`, `.june/refs/heads/`, and `.june/refs/tags/` directories.
+### `config`
+- **Usage**: `june config <key> [<value>]`
+- **What it does**:
+  - `june config <key>`: Reads a setting from `.june/config`. Prints a blank line if it is not set.
+  - `june config <key> <value>`: Saves or updates the setting in `.june/config`.
+- **Errors**: Fails if you do not provide a key.
 
-### 2. `add`
+### `add`
+- **Usage**: `june add <file>...`
+- **What it does**: Resolves file paths relative to your repository root, checks `.juneignore` rules, writes compressed blob objects, and records their SHA-1, file mode, byte size, and modification time in `.june/index`. Recursively scans folders and unstages files that were deleted.
+- **Errors**: Fails if you do not provide any paths or if a path does not match any files.
 
-* **Syntax**: `june add <file>...`
-- Staging changed files is required to prepare a snapshot of the workspace for a future commit.
-- The command checks if the user provided at least one path target. It then resolves each argument to add regular files, walk directories recursively, or remove entries if files have been deleted on disk.
-- In `Add`, June validates the arguments length. If empty, it throws a user-facing operation error; otherwise, it converts the array to a list and routes execution to the repository staging workflow: `repo.add()`.
+### `status`
+- **Usage**: `june status`
+- **What it does**: Scans your workspace and index to show:
+  - Your active branch (or detached HEAD commit).
+  - Staged changes ready to commit (in green).
+  - Tracked files that are modified or deleted in the workspace (in red).
+  - Untracked files and folders (in red).
+  - Prints `nothing to commit, working tree clean` when everything is up to date.
 
-```java
-public static void run(Repository repo, String[] args) throws IOException {
-  if (args.length == 0) {
-    throw new OperationException("nothing specified, nothing added");
-  }
-  repo.add(Arrays.asList(args));
-}
-```
-- Validating the arguments length before invoking the staging workflow prevents empty stages from running.
-- Passing the arguments as a standard Java list ensures compatibility with collection walking methods.
+### `commit`
+- **Usage**: `june commit [-a] -m <message>` or `june commit -am <message>`
+- **Options**:
+  - `-m <message>`: Required commit message.
+  - `-a`, `-am`: Automatically stages modified tracked files before creating the commit.
+- **What it does**: Builds the Merkle tree from the index, writes a commit object with author details and timestamps, and updates your current branch pointer and HEAD.
+- **Errors**: Fails if the commit message is missing or blank.
 
-### 3. `commit`
+### `diff`
+- **Usage**: `june diff [--cached | --staged]`
+- **Options**:
+  - Without flags: Shows changes between files on disk and the staging index.
+  - `--cached` / `--staged`: Shows changes between the staging index and your current commit.
+- **What it does**: Runs the Myers diff algorithm and outputs unified diff format with ANSI terminal colors (green for additions, red for deletions, cyan for hunk headers). Binary files display `Binary files differ`.
 
-* **Syntax**: `june commit [-a] -m <message>` or `june commit -am <message>`
-- Recording modifications in a commit permanently saves the staged state to the commit log.
-- Commits require a non-blank message parameter and optional auto-staging flags to automatically include modified tracked files.
-- In `june.cmd.Commit`, June iterates through argument inputs, toggling auto-stage state variables when encountering `-a` or `-am` flags, and extracting the trailing message parameter when encountering `-m` or `-am`.
+### `branch`
+- **Usage**: `june branch [-d | -D | -m] [<branch-name>] [<new-name>]`
+- **Options**:
+  - No arguments: Lists local branches alphabetically, marking the current one with `*` in green.
+  - `<name>`: Creates a new branch pointing to the current commit.
+  - `-m <new-name>`: Renames the active branch.
+  - `-m <old> <new>`: Renames a specific branch.
+  - `-d <name>`: Deletes a branch if it has already been merged into HEAD.
+  - `-D <name>`: Force deletes a branch even if it has unmerged commits.
+- **Errors**: Fails if the branch already exists, does not exist, or if you try to delete the currently checked-out branch.
 
-```java
-public static void run(Repository repo, String[] args) throws IOException {
-  String msg = null;
-  boolean auto = false;
-  for (int i = 0; i < args.length; i++) {
-    switch (args[i]) {
-      case "-a" -> auto = true;
-      case "-m", "-am" -> {
-        if (args[i].equals("-am")) {
-          auto = true;
-        }
-        if (i + 1 < args.length) {
-          msg = args[++i];
-        }
-      }
-      default -> {}
-    }
-  }
-  if (msg == null) {
-    throw new OperationException("fatal: no commit message specified (use -m \"message\")");
-  }
-  String result = repo.commit(msg, auto).message();
-  if (!result.isEmpty()) {
-    System.out.println(result);
-  }
-}
-```
-- Parsing the arguments with a switch loop allows options like `-a` and `-m` to be specified in any order.
-- Splicing the next argument index immediately when `-m` or `-am` is detected safely captures multi-word commit messages enclosed in quotes.
-- The command throws a clean operation exception if no message is found, preventing the creation of empty-labeled commits.
+### `tag`
+- **Usage**: `june tag [-d] [<tag-name>] [<commit-or-ref>]`
+- **Options**:
+  - No arguments: Lists existing tags in alphabetical order.
+  - `<name> [<ref>]`: Creates a tag pointing to a specific commit or current HEAD.
+  - `-d <name>`: Deletes a tag.
+- **Errors**: Fails if the tag name already exists when creating, or does not exist when deleting.
 
-### 4. `status`
+### `checkout`
+- **Usage**: `june checkout <branch-name> | <commit-or-tag>`
+- **What it does**: Checks for uncommitted changes that would be overwritten, restores files in your workspace, updates the staging index, and points HEAD to the target branch (or directly to a commit hash in detached HEAD mode).
+- **Errors**: Fails if the target does not exist or if local uncommitted changes would be lost.
 
-* **Syntax**: `june status`
-- Displaying unstaged, staged, and untracked changes helps users verify modifications before recording commits.
-- Grouping status results into clear categories and printing them in color makes changes easy to scan in the terminal.
-- In `june.cmd.Status`, June receives the categorized status model from the library layer, prints the branch name, and writes out staged files in green, and unstaged or untracked paths in red.
+### `restore`
+- **Usage**: `june restore [--staged] <file>...`
+- **Options**:
+  - Default: Replaces modified files in your workspace with their versions from the staging index.
+  - `--staged`: Unstages index entries back to the state of your last commit without changing files on disk.
+- **Errors**: Fails if you do not specify any paths or if the path does not match any tracked file.
 
-```java
-private static final String ANSI_RESET = "\u001B[0m";
-private static final String ANSI_GREEN = "\u001B[32m";
-private static final String ANSI_RED = "\u001B[31m";
+### `rm`
+- **Usage**: `june rm [--cached] <file>...`
+- **Options**:
+  - Default: Removes the file from the staging index and deletes it from disk.
+  - `--cached`: Removes the file from the staging index but keeps the file in your workspace.
+- **Errors**: Fails if the file is not currently tracked.
 
-public static void run(Repository repo, String[] args) throws IOException {
-  formatStatus(repo.status());
-}
+### `mv`
+- **Usage**: `june mv <source> <destination>`
+- **What it does**: Renames or moves the file on disk and updates the index to match.
+- **Errors**: Fails if the source file is untracked, does not exist, or if the destination file has uncommitted changes.
 
-private static void formatStatus(june.lib.Status.StatusResult sr) {
-  System.out.println(sr.branch());
-  printSection("Changes to be committed:",
-      "  (use \"june restore --staged <file>...\" to unstage)",
-      formatChanges(sr.staged()), ANSI_GREEN);
-  printSection("Changes not staged for commit:",
-      "  (use \"june add <file>...\" to update what will be committed)\n"
-          + "  (use \"june restore <file>...\" to discard changes in working directory)",
-      formatChanges(sr.unstaged()), ANSI_RED);
-  printSection("Untracked files:",
-      "  (use \"june add <file>...\" to include in what will be committed)",
-      sr.untracked().stream().map(s -> "  " + s).toList(), ANSI_RED);
-  if (sr.staged().isEmpty() && sr.unstaged().isEmpty() && sr.untracked().isEmpty()) {
-    System.out.println("nothing to commit, working tree clean");
-  }
-}
-```
-- Defining ANSI color escape strings as static variables keeps the terminal formatting logic clear.
-- Re-routing status lists into a helper printer checks list boundaries, ensuring empty sections are not printed.
-- Writing the ANSI reset code at the end of each print section prevents color bleeding into subsequent terminal outputs.
+### `cat-file`
+- **Usage**: `june cat-file -p <object-sha>`
+- **What it does**: Decompresses and displays the contents of any object in `.june/objects/`:
+  - `blob`: Prints raw text content.
+  - `tree`: Prints mode, object type, SHA-1, and name for each entry.
+  - `commit`: Prints headers (tree, parents, author, committer) and the commit message.
+- **Errors**: Fails if `-p` is omitted or if the object hash cannot be found.
 
-### 5. `branch`
+### `log`
+- **Usage**: `june log [--oneline] [-n <count>] [--max-count <count>]`
+- **Options**:
+  - `--oneline`: Displays a compact 7-character hash and the commit summary line.
+  - `-n <count>`, `--max-count <count>`: Limits output to the given number of commits.
+- **What it does**: Walks through your commit history starting from HEAD in chronological order.
 
-* **Syntax**: `june branch [-d | -D | -m | mv] [<branch-name>] [<new-branch-name>]`
-- Branches allow users to manage independent lines of development.
-- The command supports listing active branches, creating branch pointers at the current commit, deleting branches, or renaming branches (`-m`, `-M`, `mv`, `rename`).
-- In `june.cmd.Branch`, June parses delete flags (`-d` or `-D`) for deletion, rename options (`-m` or `mv`) for branch renaming, or routes to branch creation if a raw name is specified.
+### `merge`
+- **Usage**: `june merge <branch-or-commit>`
+- **What it does**: Performs a fast-forward merge. It checks that your current HEAD is an ancestor of the target, updates workspace files and the index to match the target tree, and moves your branch pointer forward.
+- **Errors**: Fails if the merge is not a fast-forward or if you have uncommitted workspace conflicts.
 
-### 6. `checkout`
+### `reset`
+- **Usage**: `june reset --hard [<commit>]`
+- **What it does**: Resets your working directory, index, and branch pointer to match the target commit (defaults to HEAD).
+- **Errors**: Fails if the commit hash is not found or if the `--hard` flag is omitted.
 
-* **Syntax**: `june checkout <branch-name> | <commit-or-tag>`
-- Checkout updates the workspace to match a target branch, tag, or commit.
-- Switching versions requires validating targets, checking for conflicts, and updating files on disk.
-- In `june.cmd.Checkout`, June passes the target argument string to the checkout logic to resolve hashes and verify commit payloads.
+## Command Classes
 
-### 7. `restore`
+Every command lives in its own class in the `cmd/` package:
+- `Add.java`, `Branch.java`, `CatFile.java`, `Checkout.java`, `Commit.java`, `Config.java`, `Diff.java`, `Init.java`, `Log.java`, `Merge.java`, `Mv.java`, `Reset.java`, `Restore.java`, `Rm.java`, `Status.java`, `Tag.java`.
 
-* **Syntax**: `june restore [--staged] <file>...`
-- Restore discards local modifications in files or unstages index entries.
-- The command routes paths and staging flags to the restoration utilities, expanding directories as needed.
-- In `june.cmd.Restore`, June parses the `--staged` option to choose between index modifications or workspace content resets.
+## API Mapping
 
-### 8. `diff`
+All CLI commands invoke operations directly on `june.Repository`:
 
-* **Syntax**: `june diff [--cached | --staged]`
-- Diff shows line-by-line differences between the workspace, index, and commit history.
-- Users can view changes staged in the index or modifications still in the working directory.
-- In `june.cmd.Diff`, June checks for `--cached` or `--staged` flags to select the target, and outputs the comparison as colored diff hunks (red/green/cyan) with 3 lines of unchanged context.
-
-### 9. `rm`
-
-* **Syntax**: `june rm [--cached] <file>...`
-- Removing files untracks them from the index and optionally deletes them from the disk.
-- The command validates that target paths are currently tracked before executing deletions.
-- In `june.cmd.Rm`, June parses the `--cached` option to decide whether to preserve the physical file on disk.
-
-### 10. `mv`
-
-* **Syntax**: `june mv <source> <destination>`
-- Moving a file renames it in the workspace and updates its path key in the staging index.
-- June verifies that the source path is tracked and the destination path is free.
-- In `june.cmd.Mv`, June passes the parameters to move files and update the index entries.
-
-### 11. `cat-file`
-
-* **Syntax**: `june cat-file -p <object-sha1>`
-- Inspecting database objects displays decompressed payload details for debugging.
-- The command restricts access using the `-p` parameter for pretty-printing.
-- In `june.cmd.CatFile`, June verifies the pretty-print flag and outputs the resolved object contents.
-
-### 12. `config`
-
-* **Syntax**: `june config <key> [<value>]`
-- Configuring options sets local values for key variables like username and email.
-- The command splits reads (with one argument) from writes (with two arguments).
-- In `june.cmd.Config`, June checks the argument length to select read or write actions.
-
-### 13. `reset`
-
-* **Syntax**: `june reset --hard [<commit-sha1>]`
-- Hard resetting updates the workspace, index, and branch pointers to match a target commit.
-- The command requires a `--hard` flag to confirm that local modifications will be overwritten.
-- In `june.cmd.Reset`, June validates the hard reset flag and resolves the target commit hash.
-
-### 14. `tag`
-
-* **Syntax**: `june tag [-d] [<tag-name>] [<commit-sha1>]`
-- Tags represent permanent named references to specific commits.
-- The command lists existing tags, deletes reference files, or creates new tags pointing at HEAD or a resolved commit.
-- In `june.cmd.Tag`, June checks for tag deletion flags or name parameters to update tag references.
-
-### 15. `merge`
-
-* **Syntax**: `june merge <branch-or-tag-or-commit>`
-- Merging integrates history from a branch, tag, or commit into the current HEAD.
-- June supports fast-forward merges only; it will update the active branch pointer when the target is a descendant of the current commit.
-- In `june.cmd.Merge`, June resolves the target against branch refs, tag refs, and short commit hashes, then validates the fast-forward condition.
-
-### 16. `log`
-
-* **Syntax**: `june log [--oneline] [-n <count>] [--max-count <count>]`
-- The commit log displays the history of commits in reverse chronological order.
-- Logging traverses parent hashes from HEAD and supports compact formatting and count limits.
-- In `june.cmd.Log`, June parses options like `--oneline`, `-n`, and `--max-count` to format and filter the output list.
-
-## 3. Class Design of the Command Wrappers
-
-Each command has a dedicated wrapper class under `cmd/` to separate argument parsing from logical execution:
-* **Add.java**: Parses path lists and calls `repo.add()`.
-* **Branch.java**: Detects listing vs deletion vs creation flags.
-* **CatFile.java**: Enforces `-p` parameters and prints outputs.
-* **Checkout.java**: Verifies target arguments and calls checkout.
-* **Commit.java**: Parses `-am`, `-a`, and `-m` commit options.
-* **Config.java**: Routes reading vs writing calls to config utilities.
-* **Diff.java**: Checks for `--cached` / `--staged` flags.
-* **Init.java**: Calls the repository initialization method directly.
-* **Log.java**: Checks for `--oneline` and `-n` limits.
-* **Merge.java**: Resolves target branch names to trigger fast-forward checks.
-* **Mv.java**: Verifies source and destination parameters.
-* **Reset.java**: Validates `--hard` flags and commit targets.
-* **Restore.java**: Checks for `--staged` flags and path arrays.
-* **Rm.java**: Extracts path specifications and `--cached` flags.
-* **Status.java**: Prints the results of the repository status call.
-* **Tag.java**: Parses tag listing, tag creation, or tag deletion flags.
-
-## 4. Programmatic API Mapping
-
-In addition to command-line execution, the library exposes all features via direct method calls on `june.Repository` or the logical classes inside `june.lib`. This makes June fully usable as a standalone programmatic library:
-
-| VCS Concept | Library API Invocation | CLI Command Shadowed |
+| Operation | Direct Repository API | Handler |
 | :--- | :--- | :--- |
 | **Initialize** | `repo.init()` | `Init.java` |
-| **Stage Changes** | `repo.add(List<String> paths)` | `Add.java` |
-| **Record Commit** | `repo.commit(String message, boolean autoStage)` | `Commit.java` |
-| **Check Status** | `repo.status()` | `Status.java` |
-| **Checkout Target** | `repo.checkout(String target)` | `Checkout.java` |
-| **Restore State** | `repo.restore(List<String> paths, boolean staged)` | `Restore.java` |
-| **Generate Diff** | `repo.diff(boolean staged)` | `Diff.java` |
-| **Untrack Files** | `repo.rm(List<String> paths, boolean cached)` | `Rm.java` |
-| **Rename Files** | `repo.mv(String src, String dest)` | `Mv.java` |
-| **Log History** | `repo.log(int maxCount)` | `Log.java` |
-| **Inspect Objects** | `repo.catFile(String ref)` | `CatFile.java` |
-| **Manage Config** | `repo.getConfig(key)` / `repo.setConfig(key, val)` | `Config.java` |
-| **Reset State** | `repo.reset(String target)` | `Reset.java` |
-| **Merge Ancestry** | `repo.merge(String target)` | `Merge.java` |
-| **Branch Operations**| `repo.createBranch(name)` / `repo.listBranches()` / `repo.deleteBranch(name, force)` | `Branch.java` |
-| **Tag Operations** | `repo.createTag(name, sha)` / `repo.listTags()` / `repo.deleteTag(name)` | `Tag.java` |
+| **Stage** | `repo.add(paths)` | `Add.java` |
+| **Commit** | `repo.commit(message, auto)` | `Commit.java` |
+| **Status** | `repo.status()` | `Status.java` |
+| **Checkout** | `repo.checkout(target)` | `Checkout.java` |
+| **Restore** | `repo.restore(paths, staged)` | `Restore.java` |
+| **Diff** | `repo.diff(staged)` | `Diff.java` |
+| **Remove** | `repo.rm(paths, cached)` | `Rm.java` |
+| **Move** | `repo.mv(source, dest)` | `Mv.java` |
+| **Log** | `repo.log(limit)` | `Log.java` |
+| **Cat-File** | `repo.catFile(ref)` | `CatFile.java` |
+| **Config** | `repo.configGet(key)` / `repo.configSet(key, val)` | `Config.java` |
+| **Reset** | `repo.reset(target)` | `Reset.java` |
+| **Merge** | `repo.merge(target)` | `Merge.java` |
+| **Branch** | `repo.branchList()` / `repo.branchCreate(name)` / `repo.branchDelete(name, force)` | `Branch.java` |
+| **Tag** | `repo.tagList()` / `repo.tagCreate(name, sha)` / `repo.tagDelete(name)` | `Tag.java` |

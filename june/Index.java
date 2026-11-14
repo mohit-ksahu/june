@@ -5,16 +5,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Collection;
 import java.util.TreeMap;
 
 public class Index {
-  public record Entry(String sha1, String mode, String path, long size, long mtime) {
-    public Entry(String sha1, String mode, String path) {
-      this(sha1, mode, path, -1L, -1L);
-    }
-  }
+  public record Entry(String hash, String mode, String path, long size, long mtime) {}
 
   private static final String FIELD_SEP = "\0";
   private static final String LINE_SEP = "\n";
@@ -24,35 +19,50 @@ public class Index {
 
   public Index(File indexFile) throws IOException {
     this.indexFile = indexFile;
-    if (indexFile.exists()) {
-      for (String line : Files.readAllLines(indexFile.toPath(), StandardCharsets.UTF_8)) {
-        if (line.isEmpty()) {
-          continue;
-        }
-        String[] parts = line.split(FIELD_SEP, 5);
-        if (parts.length == 3) {
-          validatePath(parts[2]);
-          entries.put(parts[2], new Entry(parts[0], parts[1], parts[2]));
-        } else if (parts.length == 5) {
-          validatePath(parts[4]);
-          long sz = parts[2].matches("-?\\d+") ? Long.parseLong(parts[2]) : -1L;
-          long mt = parts[3].matches("-?\\d+") ? Long.parseLong(parts[3]) : -1L;
-          entries.put(parts[4], new Entry(parts[0], parts[1], parts[4], sz, mt));
-        }
-      }
+    if (!indexFile.exists()) {
+      return;
+    }
+    for (String line : Files.readAllLines(indexFile.toPath(), StandardCharsets.UTF_8)) {
+      parseLine(line);
     }
   }
 
-  public void add(String sha1, String mode, String path) {
-    add(sha1, mode, path, -1L, -1L);
+  private void parseLine(String line) {
+    int[] p = new int[4];
+    int from = 0;
+    for (int i = 0; i < 4; i++) {
+      int idx = line.indexOf('\0', from);
+      if (idx == -1) {
+        return;
+      }
+      p[i] = idx;
+      from = idx + 1;
+    }
+    String path = line.substring(p[3] + 1);
+    checkPath(path);
+    long size = parseLong(line.substring(p[1] + 1, p[2]));
+    long mtime = parseLong(line.substring(p[2] + 1, p[3]));
+    entries.put(path, new Entry(line.substring(0, p[0]), line.substring(p[0] + 1, p[1]), path, size, mtime));
   }
 
-  public void add(String sha1, String mode, String path, long size, long mtime) {
-    validatePath(path);
-    entries.put(path, new Entry(sha1, mode, path, size, mtime));
+  private static long parseLong(String val) {
+    try {
+      return Long.parseLong(val);
+    } catch (NumberFormatException e) {
+      return -1L;
+    }
   }
 
-  private static void validatePath(String path) {
+  public void add(String hash, String mode, String path) {
+    add(hash, mode, path, -1L, -1L);
+  }
+
+  public void add(String hash, String mode, String path, long size, long mtime) {
+    checkPath(path);
+    entries.put(path, new Entry(hash, mode, path, size, mtime));
+  }
+
+  private static void checkPath(String path) {
     if (path == null || path.indexOf('\0') != -1 || path.indexOf('\n') != -1
         || path.indexOf('\r') != -1) {
       throw new OperationException("index paths cannot contain NUL or newline");
@@ -63,12 +73,12 @@ public class Index {
     return entries.remove(path) != null;
   }
 
-  public Entry getEntry(String path) {
+  public Entry entry(String path) {
     return entries.get(path);
   }
 
-  public List<Entry> getEntries() {
-    return new ArrayList<>(entries.values());
+  public Collection<Entry> entries() {
+    return entries.values();
   }
 
   public void clear() {
@@ -76,29 +86,31 @@ public class Index {
   }
 
   public void write() throws IOException {
-    File lock = new File(indexFile.getParentFile(), "index.lock");
-    FileLock.acquireOrBreak(lock);
-    StringBuilder sb = new StringBuilder();
-    for (Entry e : entries.values()) {
-      sb.append(e.sha1()).append(FIELD_SEP)
-        .append(e.mode()).append(FIELD_SEP)
-        .append(e.size()).append(FIELD_SEP)
-        .append(e.mtime()).append(FIELD_SEP)
-        .append(e.path()).append(LINE_SEP);
+    StringBuilder buf = new StringBuilder();
+    for (Entry entry : entries.values()) {
+      buf.append(entry.hash()).append(FIELD_SEP)
+        .append(entry.mode()).append(FIELD_SEP)
+        .append(entry.size()).append(FIELD_SEP)
+        .append(entry.mtime()).append(FIELD_SEP)
+        .append(entry.path()).append(LINE_SEP);
     }
-    Files.writeString(lock.toPath(), sb.toString(), StandardCharsets.UTF_8);
-    Files.move(lock.toPath(), indexFile.toPath(), StandardCopyOption.ATOMIC_MOVE);
+    FileLock.write(indexFile, buf.toString());
   }
 }
 
 final class FileLock {
-
   private static final long STALE_LOCK_MILLIS =
       Long.getLong("june.lock.staleMillis", 5L * 60 * 1000);
 
-  private FileLock() {}
+  static void write(File target, String content) throws IOException {
+    File lock = new File(target.getParentFile(), target.getName() + ".lock");
+    acquire(lock);
+    lock.deleteOnExit();
+    Files.writeString(lock.toPath(), content, StandardCharsets.UTF_8);
+    Files.move(lock.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE);
+  }
 
-  static void acquireOrBreak(File lock) throws IOException {
+  static void acquire(File lock) throws IOException {
     File parent = lock.getParentFile();
     if (parent != null) {
       parent.mkdirs();
@@ -117,7 +129,7 @@ final class FileLock {
   }
 
   private static boolean isStale(File lock) {
-    long mtime = Helper.fileModifiedTime(lock);
+    long mtime = Worktree.mtime(lock);
     return mtime > 0 && (System.currentTimeMillis() - mtime > STALE_LOCK_MILLIS);
   }
 }
